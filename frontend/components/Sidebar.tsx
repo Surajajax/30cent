@@ -30,12 +30,12 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-[#0e0e0e] text-[#ececec] border-r border-[#262626] flex flex-col h-screen sticky top-0 select-none font-sans">
+    <aside className="w-64 bg-[#000000] text-[#ececec] border-r border-[#262626] flex flex-col h-screen sticky top-0 select-none font-sans">
       {/* Header section with PNG logo image & app name */}
       <div className="p-3.5 border-b border-[#262626] flex items-center gap-3">
         <div className="relative w-8 h-8 flex-shrink-0">
           <Image
-            src="/image_8dfb0043.png"
+            src="/logo.png"
             alt="30cent Logo"
             width={32}
             height={32}
@@ -106,4 +106,4 @@ export default function Sidebar() {
     </aside>
   );
 }
-
+
