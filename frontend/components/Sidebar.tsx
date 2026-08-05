@@ -33,17 +33,23 @@ export default function Sidebar() {
     <aside className="w-64 bg-[#000000] text-[#ececec] border-r border-[#262626] flex flex-col h-screen sticky top-0 select-none font-sans">
       {/* Header section with PNG logo image & app name */}
       <div className="p-3.5 border-b border-[#262626] flex items-center gap-3">
-        <div className="relative w-8 h-8 flex-shrink-0">
+        <Link
+          href="/"
+          onClick={() => {
+            if (typeof window !== 'undefined') window.location.href = '/';
+          }}
+          className="relative w-10 h-10 flex-shrink-0"
+        >
           <Image
             src="/logo.png"
             alt="30cent Logo"
-            width={32}
-            height={32}
+            width={40}
+            height={40}
             className="object-contain w-full h-full"
             priority
           />
-        </div>
-        <span className="font-semibold text-base text-[#ececec] tracking-tight">
+        </Link>
+        <span className="font-semibold text-lg text-[#ececec] tracking-tight">
           30cent
         </span>
       </div>
@@ -69,7 +75,7 @@ export default function Sidebar() {
             >
               <Icon
                 className={`w-4 h-4 ${
-                  isActive ? 'text-[#10a37f]' : 'text-[#b4b4b4]'
+                  isActive ? 'text-[#FFFFFF]' : 'text-[#b4b4b4]'
                 }`}
               />
               <span>{item.name}</span>
