@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import imageBlack from '../image_black.png';
 import {
   Home,
   Wallet,
@@ -41,7 +42,7 @@ export default function Sidebar() {
           className="relative w-10 h-10 flex-shrink-0"
         >
           <Image
-            src="/logo.png"
+            src={imageBlack}
             alt="30cent Logo"
             width={40}
             height={40}
