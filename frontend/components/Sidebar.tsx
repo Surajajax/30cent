@@ -16,7 +16,7 @@ import {
 interface NavItem {
   name: string;
   href: string;
-  icon: React.ElementType;
+  icon: React.ElementType;  
 }
 
 const navItems: NavItem[] = [
