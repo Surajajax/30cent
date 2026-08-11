@@ -11,6 +11,7 @@ import {
   Sparkles,
   BarChart3,
   Settings,
+  Plug,
 } from 'lucide-react';
 
 interface NavItem {
@@ -25,6 +26,7 @@ const navItems: NavItem[] = [
   { name: 'Goals', href: '/goals', icon: Target },
   { name: 'AI assistant', href: '/ai', icon: Sparkles },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
+  { name: 'Connect', href: '/connect', icon: Plug },
 ];
 
 export default function Sidebar() {
@@ -51,7 +53,7 @@ export default function Sidebar() {
           />
         </Link>
         <span className="font-semibold text-lg text-[#ececec] tracking-tight">
-          30cent
+          30Cent
         </span>
       </div>
 
