@@ -1,13 +1,31 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.plaid_routes import router as plaid_router
+
 
 app = FastAPI(
-    title="30Cent API",
-    description="AI-Powered Personal Finance API",
-    version="1.0.0",
+    title="30cent API"
 )
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+app.include_router(plaid_router)
+
 
 @app.get("/")
 def root():
+
     return {
-        "message": "Welcome to 30Cent API 🚀"
+        "message": "30cent backend is running"
     }
