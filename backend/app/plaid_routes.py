@@ -9,6 +9,7 @@ from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import (
     ItemPublicTokenExchangeRequest
 )
+from plaid.model.accounts_get_request import AccountsGetRequest
 
 from app.plaid_client import plaid_client
 
@@ -29,9 +30,7 @@ class PublicTokenRequest(BaseModel):
 
 @router.post("/create-link-token")
 async def create_link_token():
-
     try:
-
         request = LinkTokenCreateRequest(
             user=LinkTokenCreateRequestUser(
                 client_user_id="30cent-demo-user"
@@ -53,7 +52,6 @@ async def create_link_token():
         }
 
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
             detail=str(e)
@@ -64,11 +62,9 @@ async def create_link_token():
 async def exchange_public_token(
     data: PublicTokenRequest
 ):
-
     global access_token
 
     try:
-
         request = ItemPublicTokenExchangeRequest(
             public_token=data.public_token
         )
@@ -85,7 +81,48 @@ async def exchange_public_token(
         }
 
     except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
+
+@router.get("/accounts")
+async def get_accounts():
+    global access_token
+
+    if not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="No bank account connected"
+        )
+
+    try:
+        request = AccountsGetRequest(
+            access_token=access_token
+        )
+
+        response = plaid_client.accounts_get(request)
+
+        accounts = []
+        for account in response.accounts:
+            accounts.append({
+                "account_id": account.account_id,
+                "name": account.name,
+                "official_name": account.official_name,
+                "type": str(account.type),
+                "subtype": str(account.subtype),
+                "mask": account.mask,
+                "balances": {
+                    "available": account.balances.available,
+                    "current": account.balances.current,
+                    "iso_currency_code": account.balances.iso_currency_code
+                }
+            })
+
+        return {"accounts": accounts}
+
+    except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=str(e)
