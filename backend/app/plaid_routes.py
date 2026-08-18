@@ -10,6 +10,7 @@ from plaid.model.item_public_token_exchange_request import (
     ItemPublicTokenExchangeRequest
 )
 from plaid.model.accounts_get_request import AccountsGetRequest
+from plaid.model.transactions_sync_request import TransactionsSyncRequest
 
 from app.plaid_client import plaid_client
 
@@ -121,6 +122,48 @@ async def get_accounts():
             })
 
         return {"accounts": accounts}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+@router.get("/transactions")
+async def get_transactions():
+    global access_token
+
+    if not access_token:
+        raise HTTPException(
+            status_code=400,
+            detail="No bank account connected"
+        )
+
+    try:
+        request = TransactionsSyncRequest(
+            access_token=access_token
+        )
+
+        response = plaid_client.transactions_sync(request)
+
+        transactions = []
+        for transaction in response.added:
+            transactions.append({
+                "transaction_id": transaction.transaction_id,
+                "name": transaction.name,
+                "merchant_name": transaction.merchant_name,
+                "amount": transaction.amount,
+                "date": str(transaction.date),
+                "category": (
+                    transaction.personal_finance_category.primary
+                    if transaction.personal_finance_category
+                    else None
+                ),
+                "iso_currency_code": transaction.iso_currency_code
+            })
+
+        return {"transactions": transactions}
 
     except Exception as e:
         raise HTTPException(
