@@ -117,7 +117,7 @@ export default function HomePage() {
     fetchTransactions();
   }, []);
 
-  // Only show the latest 5 transactions on Home.
+  // Only show the latest 10 transactions on Home.
   const recentTransactions =
     transactions.slice(0, 10);
 
