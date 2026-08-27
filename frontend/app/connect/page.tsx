@@ -95,8 +95,16 @@ export default function ConnectPage() {
       }
 
       // Existing accounts found
-      setAccounts(data.accounts);
-      setConnected(data.accounts.length > 0);
+      const checkingAccounts = Array.isArray(data.accounts)
+        ? data.accounts.filter(
+            (account: Account) =>
+              account.type === "depository" &&
+              account.subtype === "checking"
+          )
+        : [];
+
+      setAccounts(checkingAccounts);
+      setConnected(checkingAccounts.length > 0);
 
     } catch (err) {
       console.error("Fetch accounts error:", err);

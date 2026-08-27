@@ -15,7 +15,7 @@ from plaid.model.item_remove_request import ItemRemoveRequest
 
 from app.plaid_client import plaid_client
 from app.database import get_db
-from app.models import PlaidItem
+from app.models import Account, PlaidItem
 
 
 router = APIRouter(
@@ -26,6 +26,61 @@ router = APIRouter(
 
 class PublicTokenRequest(BaseModel):
     public_token: str
+
+
+def _enum_value(value):
+    return getattr(value, "value", str(value))
+
+
+def _get_checking_account(response):
+    for account in response.accounts:
+        if (
+            _enum_value(account.type) == "depository"
+            and _enum_value(account.subtype) == "checking"
+        ):
+            return account
+
+    return None
+
+
+def _persist_account(db: Session, plaid_item: PlaidItem, account) -> None:
+    stored_account = (
+        db.query(Account)
+        .filter(Account.plaid_account_id == account.account_id)
+        .first()
+    )
+
+    if stored_account is None:
+        stored_account = Account(
+            plaid_account_id=account.account_id,
+            plaid_item_id=plaid_item.id,
+        )
+        db.add(stored_account)
+
+    stored_account.name = account.name
+    stored_account.official_name = account.official_name
+    stored_account.type = _enum_value(account.type)
+    stored_account.subtype = _enum_value(account.subtype)
+    stored_account.mask = account.mask
+    stored_account.available_balance = account.balances.available
+    stored_account.current_balance = account.balances.current
+    stored_account.currency = account.balances.iso_currency_code
+
+
+def _account_payload(account):
+    return {
+        "account_id": account.account_id,
+        "name": account.name,
+        "official_name": account.official_name,
+        "type": _enum_value(account.type),
+        "subtype": _enum_value(account.subtype),
+        "mask": account.mask,
+        "balances": {
+            "available": account.balances.available,
+            "current": account.balances.current,
+            "iso_currency_code": account.balances.iso_currency_code,
+        },
+    }
 
 
 @router.post("/create-link-token")
@@ -146,31 +201,23 @@ async def get_accounts(
 
         response = plaid_client.accounts_get(request)
 
-        accounts = []
+        checking_account = _get_checking_account(response)
 
-        for account in response.accounts:
+        if checking_account is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No checking account found"
+            )
 
-            accounts.append({
-                "account_id": account.account_id,
-                "name": account.name,
-                "official_name": account.official_name,
-                "type": str(account.type),
-                "subtype": str(account.subtype),
-                "mask": account.mask,
-
-                "balances": {
-                    "available": account.balances.available,
-                    "current": account.balances.current,
-                    "iso_currency_code": (
-                        account.balances.iso_currency_code
-                    )
-                }
-            })
+        _persist_account(db, plaid_item, checking_account)
+        db.commit()
 
         return {
-            "accounts": accounts
+            "accounts": [_account_payload(checking_account)]
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
 
         raise HTTPException(
@@ -226,7 +273,6 @@ async def get_transactions(
     db: Session = Depends(get_db)
 ):
 
-    # Get the latest connected Plaid item
     plaid_item = (
         db.query(PlaidItem)
         .order_by(PlaidItem.id.desc())
@@ -246,11 +292,28 @@ async def get_transactions(
             access_token=plaid_item.access_token
         )
 
+        accounts_response = plaid_client.accounts_get(
+            AccountsGetRequest(access_token=plaid_item.access_token)
+        )
+        checking_account = _get_checking_account(accounts_response)
+
+        if checking_account is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No checking account found"
+            )
+
+        _persist_account(db, plaid_item, checking_account)
+        db.commit()
+
         response = plaid_client.transactions_sync(request)
 
         transactions = []
 
         for transaction in response.added:
+
+            if transaction.account_id != checking_account.account_id:
+                continue
 
             transactions.append({
                 "transaction_id": transaction.transaction_id,
@@ -272,6 +335,8 @@ async def get_transactions(
             "transactions": transactions
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
 
         raise HTTPException(
