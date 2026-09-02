@@ -12,8 +12,13 @@ router = APIRouter(
 )
 
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+
 ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 
+
+# ============================================================
+# GET STOCK QUOTE
+# ============================================================
 
 @router.get("/quote")
 async def get_quote(
@@ -57,6 +62,7 @@ async def get_quote(
     quote = data.get("Global Quote")
 
     if not quote:
+
         if "Note" in data:
             raise HTTPException(
                 status_code=429,
@@ -76,21 +82,50 @@ async def get_quote(
 
     return {
         "symbol": quote.get("01. symbol"),
-        "open": float(quote.get("02. open", 0)),
-        "high": float(quote.get("03. high", 0)),
-        "low": float(quote.get("04. low", 0)),
-        "price": float(quote.get("05. price", 0)),
-        "volume": int(float(quote.get("06. volume", 0))),
-        "latest_trading_day": quote.get("07. latest trading day"),
+
+        "open": float(
+            quote.get("02. open", 0)
+        ),
+
+        "high": float(
+            quote.get("03. high", 0)
+        ),
+
+        "low": float(
+            quote.get("04. low", 0)
+        ),
+
+        "price": float(
+            quote.get("05. price", 0)
+        ),
+
+        "volume": int(
+            float(
+                quote.get("06. volume", 0)
+            )
+        ),
+
+        "latest_trading_day": quote.get(
+            "07. latest trading day"
+        ),
+
         "previous_close": float(
             quote.get("08. previous close", 0)
         ),
+
         "change": float(
             quote.get("09. change", 0)
         ),
-        "change_percent": quote.get("10. change percent"),
+
+        "change_percent": quote.get(
+            "10. change percent"
+        ),
     }
 
+
+# ============================================================
+# GET STOCK HISTORY
+# ============================================================
 
 @router.get("/history")
 async def get_history(
@@ -132,9 +167,12 @@ async def get_history(
             detail="Unable to connect to market data provider"
         )
 
-    time_series = data.get("Time Series (Daily)")
+    time_series = data.get(
+        "Time Series (Daily)"
+    )
 
     if not time_series:
+
         if "Note" in data:
             raise HTTPException(
                 status_code=429,
@@ -155,13 +193,29 @@ async def get_history(
     history = []
 
     for date, values in time_series.items():
+
         history.append({
             "date": date,
-            "open": float(values["1. open"]),
-            "high": float(values["2. high"]),
-            "low": float(values["3. low"]),
-            "close": float(values["4. close"]),
-            "volume": int(values["5. volume"]),
+
+            "open": float(
+                values["1. open"]
+            ),
+
+            "high": float(
+                values["2. high"]
+            ),
+
+            "low": float(
+                values["3. low"]
+            ),
+
+            "close": float(
+                values["4. close"]
+            ),
+
+            "volume": int(
+                values["5. volume"]
+            ),
         })
 
     history.sort(
@@ -172,4 +226,134 @@ async def get_history(
     return {
         "symbol": symbol,
         "data": history
+    }
+
+
+# ============================================================
+# GET WATCHLIST
+# ============================================================
+
+@router.get("/watchlist")
+async def get_watchlist():
+
+    if not ALPHA_VANTAGE_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="ALPHA_VANTAGE_API_KEY is not configured"
+        )
+
+    symbols = [
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "AMZN",
+        "TSLA",
+    ]
+
+    results = []
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+
+        for symbol in symbols:
+
+            params = {
+                "function": "GLOBAL_QUOTE",
+                "symbol": symbol,
+                "apikey": ALPHA_VANTAGE_API_KEY,
+            }
+
+            try:
+
+                response = await client.get(
+                    ALPHA_VANTAGE_URL,
+                    params=params
+                )
+
+                if response.status_code != 200:
+
+                    print(
+                        f"{symbol}: Provider returned "
+                        f"{response.status_code}"
+                    )
+
+                    continue
+
+                data = response.json()
+
+                # Alpha Vantage rate limit
+                if "Note" in data:
+
+                    print(
+                        f"{symbol}: Alpha Vantage "
+                        f"rate limit reached"
+                    )
+
+                    continue
+
+                # Alpha Vantage error
+                if "Information" in data:
+
+                    print(
+                        f"{symbol}: "
+                        f"{data['Information']}"
+                    )
+
+                    continue
+
+                quote = data.get(
+                    "Global Quote"
+                )
+
+                if not quote:
+
+                    print(
+                        f"{symbol}: No quote data"
+                    )
+
+                    continue
+
+                results.append({
+                    "symbol": quote.get(
+                        "01. symbol"
+                    ),
+
+                    "price": float(
+                        quote.get(
+                            "05. price",
+                            0
+                        )
+                    ),
+
+                    "change": float(
+                        quote.get(
+                            "09. change",
+                            0
+                        )
+                    ),
+
+                    "change_percent": quote.get(
+                        "10. change percent",
+                        "0%"
+                    ),
+                })
+
+            except httpx.RequestError as error:
+
+                print(
+                    f"{symbol}: Request failed - "
+                    f"{error}"
+                )
+
+            except (
+                ValueError,
+                TypeError
+            ) as error:
+
+                print(
+                    f"{symbol}: Invalid response - "
+                    f"{error}"
+                )
+
+    return {
+        "data": results
     }
