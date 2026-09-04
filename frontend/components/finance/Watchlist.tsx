@@ -4,9 +4,17 @@ import { useEffect, useState } from "react";
 
 type Stock = {
   symbol: string;
-  price: number;
-  change: number;
-  change_percent: string;
+  name?: string;
+  currency?: string;
+  price: number | null;
+  previous_close: number | null;
+  change: number | null;
+  change_percent: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  volume?: number | null;
+  latest_trading_day?: string;
 };
 
 export default function Watchlist() {
@@ -52,13 +60,18 @@ export default function Watchlist() {
       {/* Header */}
       <div>
         <p className="eyebrow">Your portfolio</p>
-        <h2 className="mt-2 text-xl font-semibold">Watchlist</h2>
-        <p className="mt-1 text-sm text-[#858a83]">Tracked US stocks and market activity.</p>
+
+        <h2 className="mt-2 text-xl font-semibold">
+          Watchlist
+        </h2>
+
+        <p className="mt-1 text-sm text-[#858a83]">
+          Tracked US stocks and market activity.
+        </p>
       </div>
 
-      {/* Watchlist container */}
-      <div className="mt-5 rounded-2xl border border-[#2a2d29] bg-[#181b18] overflow-hidden">
-
+      {/* Watchlist Container */}
+      <div className="mt-5 overflow-hidden rounded-2xl border border-[#2a2d29] bg-[#181b18]">
         {/* Loading */}
         {loading && (
           <div className="p-6 text-[#858a83]">
@@ -73,29 +86,31 @@ export default function Watchlist() {
           </div>
         )}
 
-        {/* No data */}
-        {!loading && !error && stocks.length === 0 && (
-          <div className="p-6 text-[#858a83]">
-            No market data available.
-          </div>
-        )}
+        {/* No Data */}
+        {!loading &&
+          !error &&
+          stocks.length === 0 && (
+            <div className="p-6 text-[#858a83]">
+              No market data available.
+            </div>
+          )}
 
         {/* Stocks */}
         {!loading &&
           !error &&
           stocks.map((stock, index) => {
-            const positive = stock.change >= 0;
+            const positive = (stock.change ?? 0) >= 0;
 
             return (
               <div
                 key={stock.symbol}
-                className={`flex items-center justify-between px-6 py-4 hover:bg-[#20241f] ${
+                className={`flex items-center justify-between px-6 py-4 transition hover:bg-[#20241f] ${
                   index !== stocks.length - 1
                     ? "border-b border-[#252925]"
                     : ""
                 }`}
               >
-                {/* Stock information */}
+                {/* Stock Information */}
                 <div>
                   <div className="font-semibold text-[#f4f2ed]">
                     {stock.symbol}
@@ -106,10 +121,12 @@ export default function Watchlist() {
                   </div>
                 </div>
 
-                {/* Price information */}
+                {/* Price Information */}
                 <div className="text-right">
                   <div className="font-semibold text-[#f4f2ed]">
-                    ${stock.price.toFixed(2)}
+                    {stock.price !== null
+                      ? `$${stock.price.toFixed(2)}`
+                      : "--"}
                   </div>
 
                   <div
@@ -119,10 +136,19 @@ export default function Watchlist() {
                         : "text-[#f2a092]"
                     }`}
                   >
-                    {positive ? "+" : ""}
-                    {stock.change.toFixed(2)}
+                    {stock.change !== null
+                      ? `${positive ? "+" : ""}${stock.change.toFixed(
+                          2
+                        )}`
+                      : "--"}
+
                     {" "}
-                    ({stock.change_percent})
+
+                    {stock.change_percent !== null
+                      ? `(${positive ? "+" : ""}${stock.change_percent.toFixed(
+                          2
+                        )}%)`
+                      : "(--)"}
                   </div>
                 </div>
               </div>
