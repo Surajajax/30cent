@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.market_routes import router as market_router
 
 from app.plaid_routes import router as plaid_router
+from app.routes.stock_routes import router as stock_router
 
 
 app = FastAPI(
@@ -22,6 +23,8 @@ app.add_middleware(
 app.include_router(plaid_router)
 
 app.include_router(market_router)
+
+app.include_router(stock_router)
 
 @app.get("/")
 def root():

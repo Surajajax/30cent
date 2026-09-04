@@ -1,179 +1,157 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
+import StockDetails from "./StockDetails";
 
-type Stock = {
+interface StockResult {
   symbol: string;
-  price: number;
-  change: number;
-  change_percent: string;
-  open: number;
-  high: number;
-  low: number;
-  volume: number;
-  previous_close: number;
-  latest_trading_day: string;
-};
+  name: string;
+  exchange: string;
+  type: string;
+  currency: string;
+}
 
 export default function StockSearch() {
-  const [symbol, setSymbol] = useState("");
-  const [stock, setStock] = useState<Stock | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<StockResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedStock, setSelectedStock] = useState<string | null>(null);
 
-  async function searchStock() {
-    const ticker = symbol.trim().toUpperCase();
-
-    if (!ticker) {
+  const searchStocks = async () => {
+    if (!query.trim()) {
+      setResults([]);
       return;
     }
 
     setLoading(true);
     setError("");
-    setStock(null);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/market/quote?symbol=${ticker}`
+        `http://127.0.0.1:8000/api/stocks/search?query=${encodeURIComponent(
+          query.trim()
+        )}`
       );
+
+      if (!response.ok) {
+        throw new Error("Unable to search stocks");
+      }
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(
-          data.detail || "Stock not found"
-        );
-      }
-
-      setStock(data);
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong"
-      );
+      setResults(data.data || []);
+    } catch (err) {
+      console.error(err);
+      setError("Unable to search stocks");
+      setResults([]);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  function handleKeyDown(
+  const handleKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement>
-  ) {
+  ) => {
     if (event.key === "Enter") {
-      searchStock();
+      searchStocks();
     }
+  };
+
+  if (selectedStock) {
+    return (
+      <StockDetails
+        symbol={selectedStock}
+        onBack={() => setSelectedStock(null)}
+      />
+    );
   }
 
   return (
-    <section>
-      <div>
-        <p className="eyebrow">Market data</p>
-        <h2 className="mt-2 text-xl font-semibold">Search Stock</h2>
-        <p className="mt-1 text-sm text-[#858a83]">Look up detailed information for any US stock.</p>
-      </div>
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-[#2a2d29] bg-[#181b18] p-4 sm:p-5">
+        <div className="mb-4">
+          <p className="eyebrow">Market search</p>
 
-      <div className="mt-5 flex gap-3">
-        <input
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Enter ticker e.g. AAPL"
-          className="input-field flex-1"
-        />
+          <h2 className="mt-2 text-xl font-semibold text-[#f4f2ed]">
+            Stock Search
+          </h2>
 
-        <button
-          onClick={searchStock}
-          disabled={loading}
-          className="button-primary shrink-0"
-        >
-          {loading ? "Searching..." : "Search"}
-        </button>
+          <p className="mt-1 text-sm text-[#858a83]">
+            Search public equities and review key details.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Search stocks..."
+            className="flex-1 rounded-xl border border-[#2a2d29] bg-[#181b18] px-4 py-2.5 text-sm text-[#f4f2ed] placeholder:text-[#737970] outline-none transition focus:border-[#3a3e39] focus:ring-2 focus:ring-[#2a2d29]"
+          />
+
+          <button
+            onClick={searchStocks}
+            disabled={loading}
+            className="rounded-xl border border-[#2a2d29] bg-[#181b18] px-4 py-2.5 text-sm font-medium text-[#f4f2ed] transition hover:border-[#3a3e39] hover:bg-[#20241f] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Searching..." : "Search"}
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="mt-4 rounded-2xl border border-[#7c443b] bg-[#3a211e] p-4 text-[#f2a092]">
+        <div className="rounded-2xl border border-[#7c443b] bg-[#3a211e] p-4 text-sm text-[#f2a092]">
           {error}
         </div>
       )}
 
-      {stock && (
-        <div className="mt-6 rounded-2xl border border-[#2a2d29] bg-[#181b18] p-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="text-sm text-[#858a83]">
-                Stock
+      {results.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-[#2a2d29] bg-[#181b18]">
+          {results.map((stock, index) => (
+            <button
+              key={`${stock.symbol}-${stock.exchange}`}
+              onClick={() => setSelectedStock(stock.symbol)}
+              className={`flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-[#20241f] ${
+                index !== results.length - 1
+                  ? "border-b border-[#252925]"
+                  : ""
+              }`}
+            >
+              <div>
+                <div className="font-semibold text-[#f4f2ed]">
+                  {stock.symbol}
+                </div>
+
+                <div className="text-sm text-[#858a83]">
+                  {stock.name}
+                </div>
               </div>
 
-              <div className="text-2xl font-bold text-[#f4f2ed]">
-                {stock.symbol}
-              </div>
-            </div>
+              <div className="text-right">
+                <div className="text-xs font-medium text-[#737970]">
+                  {stock.exchange}
+                </div>
 
-            <div className="text-right">
-              <div className="text-3xl font-bold text-[#f4f2ed]">
-                ${stock.price.toFixed(2)}
+                <div className="text-xs text-[#858a83]">
+                  {stock.currency}
+                </div>
               </div>
-
-              <div
-                className={`text-sm font-medium ${
-                  stock.change >= 0
-                    ? "text-[#b7d67b]"
-                    : "text-[#f2a092]"
-                }`}
-              >
-                {stock.change >= 0 ? "+" : ""}
-                {stock.change.toFixed(2)}
-                {" "}
-                ({stock.change_percent})
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-[#252925]">
-            <div>
-              <div className="text-sm text-[#858a83]">
-                Open
-              </div>
-              <div className="font-semibold text-[#f4f2ed]">
-                ${stock.open.toFixed(2)}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-[#858a83]">
-                High
-              </div>
-              <div className="font-semibold text-[#f4f2ed]">
-                ${stock.high.toFixed(2)}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-[#858a83]">
-                Low
-              </div>
-              <div className="font-semibold text-[#f4f2ed]">
-                ${stock.low.toFixed(2)}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-[#858a83]">
-                Volume
-              </div>
-              <div className="font-semibold text-[#f4f2ed]">
-                {stock.volume.toLocaleString()}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 text-sm text-[#858a83]">
-            Latest trading day:{" "}
-            {stock.latest_trading_day}
-          </div>
+            </button>
+          ))}
         </div>
       )}
-    </section>
+
+      {!loading &&
+        query.trim() &&
+        results.length === 0 &&
+        !error && (
+          <div className="rounded-2xl border border-[#2a2d29] bg-[#181b18] px-4 py-6 text-center text-sm text-[#858a83]">
+            No stocks found.
+          </div>
+        )}
+    </div>
   );
 }

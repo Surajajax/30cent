@@ -1,358 +1,150 @@
-import os
+import math
 
-import httpx
-from fastapi import APIRouter, HTTPException, Query
-from dotenv import load_dotenv
-
-load_dotenv()
+import yfinance as yf
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(
     prefix="/api/market",
     tags=["Market"]
 )
 
-ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
-ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
+WATCHLIST_SYMBOLS = [
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "TSLA",
+]
 
 
-# ============================================================
-# GET STOCK QUOTE
-# ============================================================
-
-@router.get("/quote")
-async def get_quote(
-    symbol: str = Query(..., min_length=1, max_length=10)
-):
-    if not ALPHA_VANTAGE_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="ALPHA_VANTAGE_API_KEY is not configured"
-        )
-
-    symbol = symbol.upper().strip()
-
-    params = {
-        "function": "GLOBAL_QUOTE",
-        "symbol": symbol,
-        "apikey": ALPHA_VANTAGE_API_KEY,
-    }
+def clean_value(value):
+    if value is None:
+        return None
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                ALPHA_VANTAGE_URL,
-                params=params
-            )
+        if math.isnan(float(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
 
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail="Market data provider error"
-            )
-
-        data = response.json()
-
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=502,
-            detail="Unable to connect to market data provider"
-        )
-
-    quote = data.get("Global Quote")
-
-    if not quote:
-
-        if "Note" in data:
-            raise HTTPException(
-                status_code=429,
-                detail="Market API rate limit reached"
-            )
-
-        if "Information" in data:
-            raise HTTPException(
-                status_code=400,
-                detail=data["Information"]
-            )
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"No market data found for {symbol}"
-        )
-
-    return {
-        "symbol": quote.get("01. symbol"),
-
-        "open": float(
-            quote.get("02. open", 0)
-        ),
-
-        "high": float(
-            quote.get("03. high", 0)
-        ),
-
-        "low": float(
-            quote.get("04. low", 0)
-        ),
-
-        "price": float(
-            quote.get("05. price", 0)
-        ),
-
-        "volume": int(
-            float(
-                quote.get("06. volume", 0)
-            )
-        ),
-
-        "latest_trading_day": quote.get(
-            "07. latest trading day"
-        ),
-
-        "previous_close": float(
-            quote.get("08. previous close", 0)
-        ),
-
-        "change": float(
-            quote.get("09. change", 0)
-        ),
-
-        "change_percent": quote.get(
-            "10. change percent"
-        ),
-    }
+    return value
 
 
-# ============================================================
-# GET STOCK HISTORY
-# ============================================================
+def get_stock_quote(symbol: str):
+    ticker = yf.Ticker(symbol)
 
-@router.get("/history")
-async def get_history(
-    symbol: str = Query(..., min_length=1, max_length=10)
-):
-    if not ALPHA_VANTAGE_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="ALPHA_VANTAGE_API_KEY is not configured"
-        )
-
-    symbol = symbol.upper().strip()
-
-    params = {
-        "function": "TIME_SERIES_DAILY",
-        "symbol": symbol,
-        "outputsize": "compact",
-        "apikey": ALPHA_VANTAGE_API_KEY,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                ALPHA_VANTAGE_URL,
-                params=params
-            )
-
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail="Market data provider error"
-            )
-
-        data = response.json()
-
-    except httpx.RequestError:
-        raise HTTPException(
-            status_code=502,
-            detail="Unable to connect to market data provider"
-        )
-
-    time_series = data.get(
-        "Time Series (Daily)"
+    # Get recent price data
+    history = ticker.history(
+        period="5d",
+        interval="1d",
+        auto_adjust=False
     )
 
-    if not time_series:
+    if history.empty:
+        return None
 
-        if "Note" in data:
-            raise HTTPException(
-                status_code=429,
-                detail="Market API rate limit reached"
-            )
+    # Latest available trading day
+    latest = history.iloc[-1]
 
-        if "Information" in data:
-            raise HTTPException(
-                status_code=400,
-                detail=data["Information"]
-            )
+    close = clean_value(latest["Close"])
+    open_price = clean_value(latest["Open"])
+    high = clean_value(latest["High"])
+    low = clean_value(latest["Low"])
+    volume = clean_value(latest["Volume"])
 
-        raise HTTPException(
-            status_code=404,
-            detail=f"No historical data found for {symbol}"
+    # Previous trading day's close
+    previous_close = None
+
+    if len(history) >= 2:
+        previous_close = clean_value(
+            history.iloc[-2]["Close"]
         )
 
-    history = []
+    if close is not None and previous_close is not None:
+        change = close - previous_close
 
-    for date, values in time_series.items():
-
-        history.append({
-            "date": date,
-
-            "open": float(
-                values["1. open"]
-            ),
-
-            "high": float(
-                values["2. high"]
-            ),
-
-            "low": float(
-                values["3. low"]
-            ),
-
-            "close": float(
-                values["4. close"]
-            ),
-
-            "volume": int(
-                values["5. volume"]
-            ),
-        })
-
-    history.sort(
-        key=lambda item: item["date"],
-        reverse=False
-    )
+        change_percent = (
+            change / previous_close
+        ) * 100
+    else:
+        change = None
+        change_percent = None
 
     return {
         "symbol": symbol,
-        "data": history
+        "name": symbol,
+        "currency": "USD",
+        "price": close,
+        "previous_close": previous_close,
+        "change": clean_value(change),
+        "change_percent": clean_value(change_percent),
+        "open": open_price,
+        "high": high,
+        "low": low,
+        "volume": volume,
+        "latest_trading_day": (
+            history.index[-1].strftime("%Y-%m-%d")
+        ),
     }
 
 
 # ============================================================
-# GET WATCHLIST
+# MARKET OVERVIEW
+# ============================================================
+
+@router.get("/overview")
+def get_market_overview():
+    results = []
+
+    for symbol in WATCHLIST_SYMBOLS:
+        try:
+            quote = get_stock_quote(symbol)
+
+            if quote:
+                results.append(quote)
+
+        except Exception as error:
+            print(
+                f"Market overview error for {symbol}: {error}"
+            )
+
+    if not results:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to load market data"
+        )
+
+    return {
+        "data": results
+    }
+
+
+# ============================================================
+# WATCHLIST
 # ============================================================
 
 @router.get("/watchlist")
-async def get_watchlist():
-
-    if not ALPHA_VANTAGE_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="ALPHA_VANTAGE_API_KEY is not configured"
-        )
-
-    symbols = [
-        "AAPL",
-        "MSFT",
-        "NVDA",
-        "AMZN",
-        "TSLA",
-    ]
-
+def get_watchlist():
     results = []
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    for symbol in WATCHLIST_SYMBOLS:
+        try:
+            quote = get_stock_quote(symbol)
 
-        for symbol in symbols:
+            if quote:
+                results.append(quote)
 
-            params = {
-                "function": "GLOBAL_QUOTE",
-                "symbol": symbol,
-                "apikey": ALPHA_VANTAGE_API_KEY,
-            }
+        except Exception as error:
+            print(
+                f"Watchlist error for {symbol}: {error}"
+            )
 
-            try:
-
-                response = await client.get(
-                    ALPHA_VANTAGE_URL,
-                    params=params
-                )
-
-                if response.status_code != 200:
-
-                    print(
-                        f"{symbol}: Provider returned "
-                        f"{response.status_code}"
-                    )
-
-                    continue
-
-                data = response.json()
-
-                # Alpha Vantage rate limit
-                if "Note" in data:
-
-                    print(
-                        f"{symbol}: Alpha Vantage "
-                        f"rate limit reached"
-                    )
-
-                    continue
-
-                # Alpha Vantage error
-                if "Information" in data:
-
-                    print(
-                        f"{symbol}: "
-                        f"{data['Information']}"
-                    )
-
-                    continue
-
-                quote = data.get(
-                    "Global Quote"
-                )
-
-                if not quote:
-
-                    print(
-                        f"{symbol}: No quote data"
-                    )
-
-                    continue
-
-                results.append({
-                    "symbol": quote.get(
-                        "01. symbol"
-                    ),
-
-                    "price": float(
-                        quote.get(
-                            "05. price",
-                            0
-                        )
-                    ),
-
-                    "change": float(
-                        quote.get(
-                            "09. change",
-                            0
-                        )
-                    ),
-
-                    "change_percent": quote.get(
-                        "10. change percent",
-                        "0%"
-                    ),
-                })
-
-            except httpx.RequestError as error:
-
-                print(
-                    f"{symbol}: Request failed - "
-                    f"{error}"
-                )
-
-            except (
-                ValueError,
-                TypeError
-            ) as error:
-
-                print(
-                    f"{symbol}: Invalid response - "
-                    f"{error}"
-                )
+    if not results:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to load watchlist"
+        )
 
     return {
         "data": results

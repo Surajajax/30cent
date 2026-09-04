@@ -4,9 +4,17 @@ import { useEffect, useState } from "react";
 
 type Stock = {
   symbol: string;
-  price: number;
-  change: number;
-  change_percent: string;
+  name?: string;
+  currency?: string;
+  price: number | null;
+  previous_close: number | null;
+  change: number | null;
+  change_percent: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  volume?: number | null;
+  latest_trading_day?: string;
 };
 
 export default function MarketOverview() {
@@ -21,23 +29,18 @@ export default function MarketOverview() {
         setError("");
 
         const response = await fetch(
-          "http://127.0.0.1:8000/api/market/watchlist"
+          "http://127.0.0.1:8000/api/market/overview"
         );
 
         if (!response.ok) {
-          throw new Error(
-            "Failed to fetch market data"
-          );
+          throw new Error("Failed to fetch market data");
         }
 
         const result = await response.json();
 
         setStocks(result.data || []);
       } catch (error) {
-        console.error(
-          "Market data error:",
-          error
-        );
+        console.error("Market data error:", error);
 
         setError(
           error instanceof Error
@@ -57,21 +60,29 @@ export default function MarketOverview() {
       {/* Section Header */}
       <div>
         <p className="eyebrow">Financial markets</p>
-        <h2 className="mt-2 text-xl font-semibold">Market Overview</h2>
-        <p className="mt-1 text-sm text-[#858a83]">Top US stocks and their latest movements.</p>
+
+        <h2 className="mt-2 text-xl font-semibold">
+          Market Overview
+        </h2>
+
+        <p className="mt-1 text-sm text-[#858a83]">
+          Top US stocks and their latest movements.
+        </p>
       </div>
 
       {/* Loading */}
       {loading && (
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {[1, 2, 3, 4, 5].map((item) => (
             <div
               key={item}
-              className="rounded-2xl border border-[#2a2d29] bg-[#181b18] p-5 animate-pulse"
+              className="animate-pulse rounded-2xl border border-[#2a2d29] bg-[#181b18] p-5"
             >
-              <div className="h-5 w-16 bg-[#2a2d29] rounded mb-5" />
-              <div className="h-8 w-28 bg-[#2a2d29] rounded mb-3" />
-              <div className="h-4 w-20 bg-[#2a2d29] rounded" />
+              <div className="mb-5 h-5 w-16 rounded bg-[#2a2d29]" />
+
+              <div className="mb-3 h-8 w-28 rounded bg-[#2a2d29]" />
+
+              <div className="h-4 w-20 rounded bg-[#2a2d29]" />
             </div>
           ))}
         </div>
@@ -97,9 +108,9 @@ export default function MarketOverview() {
       {!loading &&
         !error &&
         stocks.length > 0 && (
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {stocks.map((stock) => {
-              const positive = stock.change >= 0;
+              const positive = (stock.change ?? 0) >= 0;
 
               return (
                 <div
@@ -107,16 +118,21 @@ export default function MarketOverview() {
                   className="rounded-2xl border border-[#2a2d29] bg-[#181b18] p-5"
                 >
                   {/* Symbol */}
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="font-semibold text-lg text-[#f4f2ed]">
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-lg font-semibold text-[#f4f2ed]">
                       {stock.symbol}
                     </span>
-                    <span className="text-xs text-[#737970]">US</span>
+
+                    <span className="text-xs text-[#737970]">
+                      US
+                    </span>
                   </div>
 
                   {/* Price */}
                   <div className="text-2xl font-bold text-[#f4f2ed]">
-                    ${stock.price.toFixed(2)}
+                    {stock.price !== null
+                      ? `$${stock.price.toFixed(2)}`
+                      : "--"}
                   </div>
 
                   {/* Change */}
@@ -127,10 +143,19 @@ export default function MarketOverview() {
                         : "text-[#f2a092]"
                     }`}
                   >
-                    {positive ? "+" : ""}
-                    {stock.change.toFixed(2)}
+                    {stock.change !== null
+                      ? `${positive ? "+" : ""}${stock.change.toFixed(
+                          2
+                        )}`
+                      : "--"}
+
                     {" "}
-                    ({stock.change_percent})
+
+                    {stock.change_percent !== null
+                      ? `(${positive ? "+" : ""}${stock.change_percent.toFixed(
+                          2
+                        )}%)`
+                      : "(--)"}
                   </div>
                 </div>
               );
