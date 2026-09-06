@@ -4,6 +4,7 @@ from app.routes.market_routes import router as market_router
 
 from app.plaid_routes import router as plaid_router
 from app.routes.stock_routes import router as stock_router
+from app.routes.news_routes import router as news_router
 
 
 app = FastAPI(
@@ -25,6 +26,8 @@ app.include_router(plaid_router)
 app.include_router(market_router)
 
 app.include_router(stock_router)
+
+app.include_router(news_router)
 
 @app.get("/")
 def root():
