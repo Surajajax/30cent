@@ -1,6 +1,7 @@
 import MarketOverview from "@/components/finance/MarketOverview";
 import Watchlist from "@/components/finance/Watchlist";
 import StockSearch from "@/components/finance/StockSearch";
+import MarketNews from "@/components/finance/MarketNews";
 
 export default function FinancePage() {
   return (
@@ -35,6 +36,11 @@ export default function FinancePage() {
         {/* Search */}
         <section className="mt-8">
           <StockSearch />
+        </section>
+
+        {/* Market News */}
+        <section className="mt-10">
+          <MarketNews />
         </section>
 
       </div>
