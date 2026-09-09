@@ -1,7 +1,7 @@
-import math
-
 import yfinance as yf
+
 from fastapi import APIRouter, HTTPException
+
 
 router = APIRouter(
     prefix="/api/market",
@@ -18,134 +18,109 @@ WATCHLIST_SYMBOLS = [
 ]
 
 
-def clean_value(value):
-    if value is None:
-        return None
+MARKET_INDICES = [
+    {
+        "symbol": "^GSPC",
+        "name": "S&P 500",
+    },
+    {
+        "symbol": "^IXIC",
+        "name": "NASDAQ",
+    },
+    {
+        "symbol": "^DJI",
+        "name": "Dow Jones",
+    },
+]
 
-    try:
-        if math.isnan(float(value)):
-            return None
-    except (TypeError, ValueError):
-        pass
 
-    return value
-
-
-def get_stock_quote(symbol: str):
+def get_stock_data(symbol: str, name: str | None = None):
     ticker = yf.Ticker(symbol)
 
-    # Get recent price data
     history = ticker.history(
         period="5d",
         interval="1d",
-        auto_adjust=False
+        auto_adjust=False,
     )
 
     if history.empty:
         return None
 
-    # Latest available trading day
     latest = history.iloc[-1]
 
-    close = clean_value(latest["Close"])
-    open_price = clean_value(latest["Open"])
-    high = clean_value(latest["High"])
-    low = clean_value(latest["Low"])
-    volume = clean_value(latest["Volume"])
-
-    # Previous trading day's close
-    previous_close = None
+    price = float(latest["Close"])
 
     if len(history) >= 2:
-        previous_close = clean_value(
-            history.iloc[-2]["Close"]
-        )
-
-    if close is not None and previous_close is not None:
-        change = close - previous_close
-
-        change_percent = (
-            change / previous_close
-        ) * 100
+        previous_close = float(history.iloc[-2]["Close"])
     else:
-        change = None
-        change_percent = None
+        previous_close = price
+
+    change = price - previous_close
+
+    change_percent = (
+        (change / previous_close) * 100
+        if previous_close
+        else 0
+    )
 
     return {
         "symbol": symbol,
-        "name": symbol,
+        "name": name or symbol,
         "currency": "USD",
-        "price": close,
+        "price": price,
         "previous_close": previous_close,
-        "change": clean_value(change),
-        "change_percent": clean_value(change_percent),
-        "open": open_price,
-        "high": high,
-        "low": low,
-        "volume": volume,
-        "latest_trading_day": (
-            history.index[-1].strftime("%Y-%m-%d")
-        ),
+        "change": change,
+        "change_percent": change_percent,
+        "open": float(latest["Open"]),
+        "high": float(latest["High"]),
+        "low": float(latest["Low"]),
+        "volume": int(latest["Volume"]),
+        "latest_trading_day": str(history.index[-1].date()),
     }
 
-
-# ============================================================
-# MARKET OVERVIEW
-# ============================================================
 
 @router.get("/overview")
-def get_market_overview():
-    results = []
+async def market_overview():
+    try:
+        indices = []
 
-    for symbol in WATCHLIST_SYMBOLS:
-        try:
-            quote = get_stock_quote(symbol)
-
-            if quote:
-                results.append(quote)
-
-        except Exception as error:
-            print(
-                f"Market overview error for {symbol}: {error}"
+        for index in MARKET_INDICES:
+            data = get_stock_data(
+                index["symbol"],
+                index["name"],
             )
 
-    if not results:
+            if data:
+                indices.append(data)
+
+        return {
+            "data": indices
+        }
+
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail="Unable to load market data"
+            detail=str(e),
         )
 
-    return {
-        "data": results
-    }
-
-
-# ============================================================
-# WATCHLIST
-# ============================================================
 
 @router.get("/watchlist")
-def get_watchlist():
-    results = []
+async def market_watchlist():
+    try:
+        stocks = []
 
-    for symbol in WATCHLIST_SYMBOLS:
-        try:
-            quote = get_stock_quote(symbol)
+        for symbol in WATCHLIST_SYMBOLS:
+            data = get_stock_data(symbol)
 
-            if quote:
-                results.append(quote)
+            if data:
+                stocks.append(data)
 
-        except Exception as error:
-            print(
-                f"Watchlist error for {symbol}: {error}"
-            )
+        return {
+            "data": stocks
+        }
 
-    if not results:
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail="Unable to load watchlist"
+            detail=str(e),
         )
-
-    return {
-        "data": results
-    }

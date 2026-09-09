@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-type Stock = {
+type MarketIndex = {
   symbol: string;
-  name?: string;
+  name: string;
   currency?: string;
   price: number | null;
   previous_close: number | null;
@@ -17,8 +17,29 @@ type Stock = {
   latest_trading_day?: string;
 };
 
+const INDEX_META: Record<
+  string,
+  {
+    label: string;
+    description: string;
+  }
+> = {
+  "^GSPC": {
+    label: "S&P 500",
+    description: "Large-cap US equities",
+  },
+  "^IXIC": {
+    label: "NASDAQ",
+    description: "Technology-heavy US index",
+  },
+  "^DJI": {
+    label: "DOW JONES",
+    description: "30 major US companies",
+  },
+};
+
 export default function MarketOverview() {
-  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [indices, setIndices] = useState<MarketIndex[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -38,7 +59,7 @@ export default function MarketOverview() {
 
         const result = await response.json();
 
-        setStocks(result.data || []);
+        setIndices(result.data || []);
       } catch (error) {
         console.error("Market data error:", error);
 
@@ -56,33 +77,52 @@ export default function MarketOverview() {
   }, []);
 
   return (
-    <section>
-      {/* Section Header */}
-      <div>
-        <p className="eyebrow">Financial markets</p>
+    <section className="w-full">
+      {/* Section heading */}
+      <div className="mb-5 flex items-end justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#858a83]">
+            US Markets
+          </p>
 
-        <h2 className="mt-2 text-xl font-semibold">
-          Market Overview
-        </h2>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#f4f2ed]">
+            Market Overview
+          </h2>
 
-        <p className="mt-1 text-sm text-[#858a83]">
-          Top US stocks and their latest movements.
-        </p>
+          <p className="mt-2 text-sm text-[#858a83]">
+            Major US indices and their latest movements.
+          </p>
+        </div>
+
+        <div className="hidden items-center gap-2 rounded-xl border border-[#2a2d29] bg-[#20241f] px-3 py-2 sm:flex">
+          <span className="h-2 w-2 rounded-full bg-[#b7d67b]" />
+
+          <span className="text-xs text-[#858a83]">
+            Market data
+          </span>
+        </div>
       </div>
 
       {/* Loading */}
       {loading && (
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {[1, 2, 3, 4, 5].map((item) => (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[1, 2, 3].map((item) => (
             <div
               key={item}
-              className="animate-pulse rounded-2xl border border-[#2a2d29] bg-[#181b18] p-5"
+              className="animate-pulse overflow-hidden rounded-2xl border border-[#2a2d29] bg-[#181b18] p-6"
             >
-              <div className="mb-5 h-5 w-16 rounded bg-[#2a2d29]" />
+              <div className="h-4 w-24 rounded bg-[#2a2d29]" />
 
-              <div className="mb-3 h-8 w-28 rounded bg-[#2a2d29]" />
+              <div className="mt-5 h-8 w-36 rounded bg-[#2a2d29]" />
 
-              <div className="h-4 w-20 rounded bg-[#2a2d29]" />
+              <div className="mt-3 h-5 w-28 rounded bg-[#2a2d29]" />
+
+              <div className="mt-8 h-16 w-full rounded bg-[#20241f]" />
+
+              <div className="mt-6 flex justify-between">
+                <div className="h-3 w-16 rounded bg-[#2a2d29]" />
+                <div className="h-3 w-16 rounded bg-[#2a2d29]" />
+              </div>
             </div>
           ))}
         </div>
@@ -90,78 +130,194 @@ export default function MarketOverview() {
 
       {/* Error */}
       {!loading && error && (
-        <div className="mt-5 rounded-2xl border border-[#7c443b] bg-[#3a211e] p-6 text-[#f2a092]">
-          {error}
+        <div className="rounded-2xl border border-[#7c443b] bg-[#3a211e] p-6">
+          <p className="text-sm text-[#f2a092]">
+            {error}
+          </p>
         </div>
       )}
 
-      {/* No Data */}
-      {!loading &&
-        !error &&
-        stocks.length === 0 && (
-          <div className="mt-5 rounded-2xl border border-[#2a2d29] bg-[#181b18] p-6 text-[#858a83]">
+      {/* Empty */}
+      {!loading && !error && indices.length === 0 && (
+        <div className="rounded-2xl border border-[#2a2d29] bg-[#181b18] p-6">
+          <p className="text-sm text-[#858a83]">
             No market data available.
-          </div>
-        )}
+          </p>
+        </div>
+      )}
 
-      {/* Market Cards */}
-      {!loading &&
-        !error &&
-        stocks.length > 0 && (
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {stocks.map((stock) => {
-              const positive = (stock.change ?? 0) >= 0;
+      {/* Index cards */}
+      {!loading && !error && indices.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {indices.map((index) => {
+            const positive = (index.change ?? 0) >= 0;
 
-              return (
-                <div
-                  key={stock.symbol}
-                  className="rounded-2xl border border-[#2a2d29] bg-[#181b18] p-5"
-                >
-                  {/* Symbol */}
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="text-lg font-semibold text-[#f4f2ed]">
-                      {stock.symbol}
-                    </span>
+            const meta = INDEX_META[index.symbol] ?? {
+              label: index.name,
+              description: "US market index",
+            };
 
-                    <span className="text-xs text-[#737970]">
-                      US
-                    </span>
+            return (
+              <div
+                key={index.symbol}
+                className="group overflow-hidden rounded-2xl border border-[#2a2d29] bg-[#181b18] p-6 transition duration-200 hover:border-[#3a3e38] hover:bg-[#1c201c]"
+              >
+                {/* Top */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-lg font-semibold tracking-tight text-[#f4f2ed]">
+                      {meta.label}
+                    </p>
+
+                    <p className="mt-1 text-xs text-[#737970]">
+                      {index.symbol}
+                    </p>
                   </div>
 
-                  {/* Price */}
-                  <div className="text-2xl font-bold text-[#f4f2ed]">
-                    {stock.price !== null
-                      ? `$${stock.price.toFixed(2)}`
+                  <span className="rounded-lg border border-[#2a2d29] px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[#737970]">
+                    US
+                  </span>
+                </div>
+
+                {/* Price */}
+                <div className="mt-6">
+                  <p className="text-3xl font-semibold tracking-[-0.04em] text-[#f4f2ed]">
+                    {index.price !== null
+                      ? index.price.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
                       : "--"}
-                  </div>
+                  </p>
 
                   {/* Change */}
                   <div
-                    className={`mt-2 text-sm font-medium ${
+                    className={`mt-2 flex items-center gap-2 text-sm font-medium ${
                       positive
                         ? "text-[#b7d67b]"
                         : "text-[#f2a092]"
                     }`}
                   >
-                    {stock.change !== null
-                      ? `${positive ? "+" : ""}${stock.change.toFixed(
-                          2
-                        )}`
-                      : "--"}
+                    <span>
+                      {index.change !== null
+                        ? `${positive ? "+" : ""}${index.change.toFixed(
+                            2
+                          )}`
+                        : "--"}
+                    </span>
 
-                    {" "}
+                    <span>
+                      (
+                      {index.change_percent !== null
+                        ? `${positive ? "+" : ""}${index.change_percent.toFixed(
+                            2
+                          )}%`
+                        : "--"}
+                      )
+                    </span>
 
-                    {stock.change_percent !== null
-                      ? `(${positive ? "+" : ""}${stock.change_percent.toFixed(
-                          2
-                        )}%)`
-                      : "(--)"}
+                    <span className="text-base">
+                      {positive ? "▲" : "▼"}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {/* Mini chart decoration */}
+                <div className="mt-7 h-16 w-full overflow-hidden">
+                  <svg
+                    viewBox="0 0 300 70"
+                    preserveAspectRatio="none"
+                    className="h-full w-full"
+                  >
+                    <defs>
+                      <linearGradient
+                        id={`gradient-${index.symbol}`}
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor={
+                            positive ? "#b7d67b" : "#f2a092"
+                          }
+                          stopOpacity="0.18"
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={
+                            positive ? "#b7d67b" : "#f2a092"
+                          }
+                          stopOpacity="0"
+                        />
+                      </linearGradient>
+                    </defs>
+
+                    <path
+                      d={
+                        positive
+                          ? "M0 55 L25 48 L45 51 L65 40 L85 44 L105 32 L125 36 L145 25 L165 30 L185 18 L205 22 L225 14 L245 19 L265 9 L285 14 L300 6 L300 70 L0 70 Z"
+                          : "M0 15 L25 24 L45 20 L65 32 L85 27 L105 38 L125 34 L145 45 L165 40 L185 49 L205 44 L225 54 L245 49 L265 59 L285 54 L300 62 L300 70 L0 70 Z"
+                      }
+                      fill={`url(#gradient-${index.symbol})`}
+                    />
+
+                    <path
+                      d={
+                        positive
+                          ? "M0 55 L25 48 L45 51 L65 40 L85 44 L105 32 L125 36 L145 25 L165 30 L185 18 L205 22 L225 14 L245 19 L265 9 L285 14 L300 6"
+                          : "M0 15 L25 24 L45 20 L65 32 L85 27 L105 38 L125 34 L145 45 L165 40 L185 49 L205 44 L225 54 L245 49 L265 59 L285 54 L300 62"
+                      }
+                      fill="none"
+                      stroke={
+                        positive ? "#b7d67b" : "#f2a092"
+                      }
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                </div>
+
+                {/* High / Low */}
+                <div className="mt-5 flex items-center justify-between border-t border-[#2a2d29] pt-4">
+                  <div>
+                    <p className="text-xs text-[#737970]">
+                      Day high
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium text-[#f4f2ed]">
+                      {index.high !== null &&
+                      index.high !== undefined
+                        ? index.high.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : "--"}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-xs text-[#737970]">
+                      Day low
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium text-[#f4f2ed]">
+                      {index.low !== null &&
+                      index.low !== undefined
+                        ? index.low.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : "--"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
