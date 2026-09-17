@@ -1,6 +1,8 @@
 ﻿"use client";
 
 import { useState } from "react";
+
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
 import StockDetails from "./StockDetails";
 
 interface StockResult {
@@ -29,7 +31,7 @@ export default function StockSearch() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/stocks/search?query=${encodeURIComponent(
+        `${getApiUrl("/api/stocks/search")}?query=${encodeURIComponent(
           query.trim()
         )}`
       );
@@ -43,7 +45,7 @@ export default function StockSearch() {
       setResults(data.data || []);
     } catch (err) {
       console.error(err);
-      setError("Unable to search stocks");
+      setError(getBackendErrorMessage(error, "Unable to search stocks"));
       setResults([]);
     } finally {
       setLoading(false);

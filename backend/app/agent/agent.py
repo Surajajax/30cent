@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import sys
 
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
@@ -42,7 +43,7 @@ async def create_mcp_client():
 
             "finance": {
                 "transport": "stdio",
-                "command": "python",
+                "command": sys.executable,
                 "args": [
                     "-m",
                     "app.mcp.finance_server",
@@ -56,7 +57,7 @@ async def create_mcp_client():
 
             "market": {
                 "transport": "stdio",
-                "command": "python",
+                "command": sys.executable,
                 "args": [
                     "-m",
                     "app.mcp.market_server",
@@ -70,7 +71,7 @@ async def create_mcp_client():
 
             "news": {
                 "transport": "stdio",
-                "command": "python",
+                "command": sys.executable,
                 "args": [
                     "-m",
                     "app.mcp.news_server",

@@ -11,6 +11,8 @@ import {
   CartesianGrid,
 } from "recharts";
 
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+
 interface StockDetailsProps {
   symbol: string;
   onBack: () => void;
@@ -82,9 +84,7 @@ export default function StockDetails({
 
       try {
         const response = await fetch(
-          `http://127.0.0.1:8000/api/stocks/details?symbol=${encodeURIComponent(
-            symbol
-          )}`
+          `${getApiUrl("/api/stocks/details")}?symbol=${encodeURIComponent(symbol)}`
         );
 
         if (!response.ok) {
@@ -96,7 +96,7 @@ export default function StockDetails({
         setStock(data);
       } catch (err) {
         console.error(err);
-        setError("Unable to load stock details");
+        setError(getBackendErrorMessage(err, "Unable to load stock details"));
       } finally {
         setLoading(false);
       }
@@ -111,9 +111,7 @@ export default function StockDetails({
 
       try {
         const response = await fetch(
-          `http://127.0.0.1:8000/api/stocks/history?symbol=${encodeURIComponent(
-            symbol
-          )}&period=${period}`
+          `${getApiUrl("/api/stocks/history")}?symbol=${encodeURIComponent(symbol)}&period=${period}`
         );
 
         if (!response.ok) {

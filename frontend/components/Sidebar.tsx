@@ -38,9 +38,6 @@ export default function Sidebar() {
       <div className="p-3.5 border-b border-[#262626] flex items-center gap-3">
         <Link
           href="/"
-          onClick={() => {
-            if (typeof window !== 'undefined') window.location.href = '/';
-          }}
           className="relative w-10 h-10 flex-shrink-0"
         >
           <Image
