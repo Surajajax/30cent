@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pgvector.sqlalchemy import Vector
 
 from sqlalchemy import (
     Date,
@@ -6,6 +7,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     func,
@@ -169,4 +171,54 @@ class Transaction(Base):
 
     account: Mapped["Account"] = relationship(
         back_populates="transactions",
+    )
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    document_metadata: Mapped[dict | None] = mapped_column(
+        "metadata",
+        JSON,
+        nullable=True,
+    )
+
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(384),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    chunk_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
     )
