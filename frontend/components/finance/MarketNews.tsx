@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+
 type NewsItem = {
   headline: string;
   summary?: string;
@@ -39,9 +41,7 @@ export default function MarketNews() {
 
       setError("");
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/news/market"
-      );
+      const response = await fetch(getApiUrl("/api/news/market"));
 
       if (!response.ok) {
         throw new Error("Failed to fetch market news");
@@ -54,11 +54,7 @@ export default function MarketNews() {
     } catch (error) {
       console.error("Market news error:", error);
 
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to load market news"
-      );
+      setError(getBackendErrorMessage(error, "Failed to load market news"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -66,7 +62,9 @@ export default function MarketNews() {
   }
 
   useEffect(() => {
-    fetchNews();
+    void (async () => {
+      await fetchNews();
+    })();
   }, []);
 
   const visibleNews = showAll ? news : news.slice(0, 6);

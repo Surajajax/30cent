@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+
 type Stock = {
   symbol: string;
   name?: string;
@@ -28,9 +30,7 @@ export default function Watchlist() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          "http://127.0.0.1:8000/api/market/watchlist"
-        );
+        const response = await fetch(getApiUrl("/api/market/watchlist"));
 
         if (!response.ok) {
           throw new Error("Failed to fetch watchlist");
@@ -41,11 +41,7 @@ export default function Watchlist() {
       } catch (error) {
         console.error("Watchlist error:", error);
 
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load watchlist"
-        );
+        setError(getBackendErrorMessage(error, "Failed to load watchlist"));
       } finally {
         setLoading(false);
       }

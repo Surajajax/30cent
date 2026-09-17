@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
 
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+
 type Account = {
   account_id: string;
   name: string;
@@ -75,9 +77,7 @@ export default function ConnectPage() {
       setLoadingAccounts(true);
       setError(null);
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/plaid/accounts"
-      );
+      const response = await fetch(getApiUrl("/api/plaid/accounts"));
 
       const data = await response.json();
 
@@ -112,7 +112,9 @@ export default function ConnectPage() {
       setAccounts([]);
       setConnected(false);
 
-      setError("Unable to load your accounts.");
+      setError(
+        getBackendErrorMessage(err, "Unable to load your accounts.")
+      );
 
     } finally {
       setLoadingAccounts(false);
@@ -130,12 +132,9 @@ export default function ConnectPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/plaid/create-link-token",
-        {
-          method: "POST",
-        }
-      );
+      const response = await fetch(getApiUrl("/api/plaid/create-link-token"), {
+        method: "POST",
+      });
 
       const data = await response.json();
 
@@ -150,7 +149,7 @@ export default function ConnectPage() {
     } catch (err) {
       console.error("Create link token error:", err);
 
-      setError("Unable to connect to Plaid.");
+      setError(getBackendErrorMessage(err, "Unable to connect to Plaid."));
       setStartingLink(false);
 
     } finally {
@@ -162,18 +161,15 @@ export default function ConnectPage() {
     try {
       setError(null);
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/plaid/exchange-public-token",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            public_token: publicToken,
-          }),
-        }
-      );
+      const response = await fetch(getApiUrl("/api/plaid/exchange-public-token"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          public_token: publicToken,
+        }),
+      });
 
       const data = await response.json();
 
@@ -188,7 +184,9 @@ export default function ConnectPage() {
     } catch (err) {
       console.error("Token exchange error:", err);
       setStartingLink(false);
-      setError("Bank connected, but account retrieval failed.");
+      setError(
+        getBackendErrorMessage(err, "Bank connected, but account retrieval failed.")
+      );
     }
   };
 
@@ -201,12 +199,9 @@ export default function ConnectPage() {
       setDisconnecting(true);
       setError(null);
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/plaid/disconnect",
-        {
-          method: "DELETE",
-        }
-      );
+      const response = await fetch(getApiUrl("/api/plaid/disconnect"), {
+        method: "DELETE",
+      });
 
       const data = await response.json();
 
@@ -241,16 +236,14 @@ export default function ConnectPage() {
     <div className="px-6 py-8 text-[#ececec]">
       <div className="mx-auto max-w-5xl">
 
-        {startingLink && (
-          <PlaidLinkFlow
-            linkToken={linkToken}
-            onSuccess={exchangePublicToken}
-            onExit={() => {
-              setLinkToken(null);
-              setStartingLink(false);
-            }}
-          />
-        )}
+        <PlaidLinkFlow
+          linkToken={startingLink ? linkToken : null}
+          onSuccess={exchangePublicToken}
+          onExit={() => {
+            setLinkToken(null);
+            setStartingLink(false);
+          }}
+        />
 
         {/* Header */}
 

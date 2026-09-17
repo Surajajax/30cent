@@ -4,14 +4,13 @@ import { CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/Header";
-
 import Cashflow, {
   type MonthlyCashflow,
 } from "@/components/Cashflow";
-
 import TransactionList, {
   type Transaction,
 } from "@/components/TransactionList";
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
 
 type Account = {
   account_id: string;
@@ -81,31 +80,22 @@ export default function HomePage() {
         setLoading(true);
         setError(null);
 
-        /*
-         * Get checking account
-         */
         const accountsResponse = await fetch(
-          "http://127.0.0.1:8000/api/plaid/accounts",
+          getApiUrl("/api/plaid/accounts"),
           {
             cache: "no-store",
           }
         );
 
-        /*
-         * Get transactions
-         */
         const transactionsResponse = await fetch(
-          "http://127.0.0.1:8000/api/plaid/transactions",
+          getApiUrl("/api/plaid/transactions"),
           {
             cache: "no-store",
           }
         );
 
-        const accountsData =
-          await accountsResponse.json();
-
-        const transactionsData =
-          await transactionsResponse.json();
+        const accountsData = await accountsResponse.json();
+        const transactionsData = await transactionsResponse.json();
 
         /*
          * NO BANK CONNECTED
@@ -168,14 +158,9 @@ export default function HomePage() {
 
         setTransactions(plaidTransactions);
       } catch (err) {
-        console.error(
-          "Dashboard fetch error:",
-          err
-        );
+        console.error("Dashboard fetch error:", err);
 
-        setError(
-          "Unable to load your financial data."
-        );
+        setError(getBackendErrorMessage(err, "Unable to load your financial data."));
 
         setAccount(null);
         setTransactions([]);

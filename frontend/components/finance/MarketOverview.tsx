@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+
 type MarketIndex = {
   symbol: string;
   name: string;
@@ -49,9 +51,7 @@ export default function MarketOverview() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          "http://127.0.0.1:8000/api/market/overview"
-        );
+        const response = await fetch(getApiUrl("/api/market/overview"));
 
         if (!response.ok) {
           throw new Error("Failed to fetch market data");
@@ -63,11 +63,7 @@ export default function MarketOverview() {
       } catch (error) {
         console.error("Market data error:", error);
 
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load market data"
-        );
+        setError(getBackendErrorMessage(error, "Failed to load market data"));
       } finally {
         setLoading(false);
       }
