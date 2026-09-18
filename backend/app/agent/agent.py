@@ -4,12 +4,18 @@ import json
 import sys
 
 from dotenv import load_dotenv
+
 from langchain_groq import ChatGroq
 from langchain_mcp_adapters.client import MultiServerMCPClient
+
 from langchain_core.messages import (
     SystemMessage,
     HumanMessage,
 )
+
+from langchain_core.tools import tool
+
+from app.rag.retriever import retrieve_context
 
 
 load_dotenv()
@@ -50,7 +56,6 @@ async def create_mcp_client():
                 ],
             },
 
-
             # -------------------------------------------------
             # MARKET MCP
             # -------------------------------------------------
@@ -63,7 +68,6 @@ async def create_mcp_client():
                     "app.mcp.market_server",
                 ],
             },
-
 
             # -------------------------------------------------
             # NEWS MCP
@@ -85,17 +89,64 @@ async def create_mcp_client():
 
 
 # =========================================================
+# RAG TOOL
+# =========================================================
+
+@tool
+def retrieve_financial_knowledge(query: str) -> str:
+    """
+    Search the 30cent financial knowledge base for stable
+    financial education and general financial concepts.
+
+    Use this tool for questions about:
+
+    - budgeting
+    - emergency funds
+    - saving
+    - investing basics
+    - diversification
+    - credit
+    - debt
+    - financial concepts
+
+    Do NOT use this tool for:
+
+    - current account balances
+    - transactions
+    - cashflow
+    - current stock prices
+    - current market conditions
+    - current news
+    """
+
+    context = retrieve_context(
+        query=query,
+        limit=5,
+    )
+
+    if not context:
+        return "No relevant financial knowledge was found."
+
+    return context
+
+
+# =========================================================
 # SYSTEM PROMPT
 # =========================================================
 
 SYSTEM_PROMPT = """
 You are the AI financial assistant for 30cent.
 
-You have access to the user's personal finance data,
-current market data, and financial news through tools.
+You have access to:
+
+1. Personal finance data through Finance MCP.
+2. Current market data through Market MCP.
+3. Current financial news through News MCP.
+4. Stable financial knowledge through the RAG tool.
 
 You must use tools whenever the user's question requires
-current, personal, market, stock, or news information.
+current, personal, market, stock, news, or knowledge-base
+information.
 
 
 =========================================================
@@ -148,145 +199,109 @@ get_company_news
 
 
 =========================================================
-TOOL SELECTION
+RAG TOOL
 =========================================================
 
-Use the appropriate tool whenever current or personal
-data is required.
+retrieve_financial_knowledge
 
-
-FINANCE EXAMPLES
-
-"What is my balance?"
-→ get_balance
-
-"Show my transactions."
-→ get_transactions
-
-"How much did I spend?"
-→ get_cashflow
-
-"Show my bank accounts."
-→ get_accounts
-
-
-MARKET EXAMPLES
-
-"What is Nvidia's price?"
-→ get_stock_price
-
-"How is the market doing?"
-→ get_market_overview
-
-"Show Nvidia's history."
-→ get_stock_history
-
-"Search for Apple."
-→ search_stock
-
-"How is my watchlist?"
-→ get_watchlist
-
-
-NEWS EXAMPLES
-
-"What's happening in the market?"
-→ get_market_news
-
-"What's the latest market news?"
-→ get_market_news
-
-"Give me today's financial news."
-→ get_market_news
-
-"What are the major market headlines?"
-→ get_market_news
-
-"What's the latest Nvidia news?"
-→ get_company_news
-
-"What's happening with Apple?"
-→ get_company_news
-
-"Show me Tesla news."
-→ get_company_news
-
-"Why is Nvidia in the news?"
-→ get_company_news
-
-"Give me recent Microsoft news."
-→ get_company_news
-
-
-=========================================================
-COMPANY → STOCK SYMBOL
-=========================================================
-
-When company news is requested, use the stock symbol.
+Use this tool for stable financial education and general
+financial concepts.
 
 Examples:
 
-Nvidia → NVDA
+"What is an emergency fund?"
+"What is diversification?"
+"How does budgeting work?"
+"What is an ETF?"
+"What is a stock?"
+"How does credit card debt work?"
+"How can I track expenses?"
+"What is cash flow?"
 
-Apple → AAPL
 
-Microsoft → MSFT
-
-Amazon → AMZN
-
-Tesla → TSLA
-
-
-=========================================================
-MULTIPLE TOOLS
-=========================================================
-
-A user question may require multiple tools.
+Do NOT use RAG for live or personal information.
 
 For example:
 
-"What is my checking balance and Nvidia's price?"
+"What's my current balance?"
+    → get_balance
 
-You should call:
+"Show my transactions."
+    → get_transactions
+
+"What's my cashflow?"
+    → get_cashflow
+
+"What's NVDA trading at right now?"
+    → get_stock_price
+
+"What's happening in the market?"
+    → get_market_news
+
+
+=========================================================
+TOOL SELECTION
+=========================================================
+
+Use the appropriate tool whenever current, personal,
+market, stock, news, or knowledge-base information is
+required.
+
+A question can require multiple tools.
+
+For example:
+
+"I have $110 in my account. What is an emergency fund?"
+
+Use:
 
 1. get_balance
-2. get_stock_price
+2. retrieve_financial_knowledge
 
-Then combine the results into one final answer.
-
-Do NOT stop after calling only one tool if another
-part of the user's question still requires data.
+Then combine the results into one answer.
 
 
 Another example:
 
-"What is Nvidia's price and what is the latest Nvidia news?"
+"What is NVDA's current price and what is diversification?"
 
-You should call:
+Use:
 
 1. get_stock_price
-2. get_company_news
-
-Then combine the results.
+2. retrieve_financial_knowledge
 
 
 Another example:
 
 "What is my balance and what is happening in the market?"
 
-You should call:
+Use:
 
 1. get_balance
 2. get_market_news
 
-Then combine the results.
+
+=========================================================
+COMPANY → STOCK SYMBOL
+=========================================================
+
+When company news or stock information is requested,
+use the stock symbol.
+
+Examples:
+
+Nvidia → NVDA
+Apple → AAPL
+Microsoft → MSFT
+Amazon → AMZN
+Tesla → TSLA
 
 
 =========================================================
 STOCK TOOL ARGUMENTS
 =========================================================
 
-When calling get_stock_price, the argument must be:
+get_stock_price:
 
 {
     "symbol": "NVDA"
@@ -295,22 +310,22 @@ When calling get_stock_price, the argument must be:
 Use "symbol", not "ticker".
 
 
-When calling get_company_news, the argument must be:
+get_company_news:
 
 {
     "symbol": "NVDA"
 }
 
-Use "symbol" for the stock symbol.
+Use "symbol".
 
 
-When calling search_stock, the argument must be:
+search_stock:
 
 {
     "query": "Apple"
 }
 
-Use "query" for the search text.
+Use "query".
 
 
 =========================================================
@@ -365,20 +380,32 @@ Never invent:
 - publication information
 - article summaries
 
-Do not claim that an article says something unless
-the returned article supports it.
-
-When summarizing news:
-
-1. Clearly state what the article reports.
-2. Separate the reported information from your own
-   explanation when necessary.
-3. Do not fabricate missing details.
-
-If no relevant news is returned, say that no relevant
-news was found.
+Do not claim an article says something unless the returned
+article supports it.
 
 
+=========================================================
+RAG RULES
+=========================================================
+RAG documents are the source of truth for stable financial
+education.
+
+When answering a question using retrieve_financial_knowledge:
+
+1. Base the answer primarily on the retrieved context.
+2. Do not introduce specific numbers, rules, recommendations,
+   or claims that are not supported by the retrieved context.
+3. Do not add outside financial guidelines unless the user
+   explicitly asks for general information beyond the
+   knowledge base.
+4. If the retrieved context does not contain enough information,
+   say that the knowledge base does not contain enough
+   information to answer that part.
+5. Preserve important qualifications and uncertainty from the
+   retrieved documents.
+6. Do not treat RAG documents as current market or account data.
+
+For current information, always use the appropriate MCP tool.
 =========================================================
 CURRENT DATA RULE
 =========================================================
@@ -398,26 +425,20 @@ If the user asks for:
 - spending
 - cash flow
 
-use the appropriate tool.
+use the appropriate live tool.
 
-Do not answer from memory when a tool can provide
-the current information.
+Do not answer current-data questions from memory.
 
 
 =========================================================
 TOOL ERROR RULE
 =========================================================
 
-If a tool returns:
+If a tool returns an error:
 
-{
-    "success": false
-}
+Do not invent an answer.
 
-do not invent an answer.
-
-Explain the problem briefly based on the returned
-error.
+Explain the problem briefly based on the returned error.
 
 For example:
 
@@ -432,8 +453,8 @@ or:
 FINAL RESPONSE
 =========================================================
 
-After all required tools have been executed, answer
-the user's original question directly.
+After all required tools have been executed, answer the
+user's original question directly.
 
 Do not mention MCP.
 
@@ -453,8 +474,7 @@ When appropriate, use:
 - bullet points
 - tables for comparisons
 
-For financial values, include the currency when
-the tool provides it.
+For financial values, include the currency when available.
 
 
 =========================================================
@@ -464,11 +484,11 @@ IMPORTANT
 Do not stop after the first tool call if the user's
 question contains multiple independent requests.
 
-Continue calling tools until all required information
-has been collected.
+Continue calling tools until all required information has
+been collected.
 
-Only produce the final answer after all required
-tool calls are complete.
+Only produce the final answer after all required tool calls
+are complete.
 """
 
 
@@ -487,12 +507,10 @@ def normalize_tool_args(
     if tool_args is None:
         return {}
 
-
     # GPT-OSS sometimes produces {"": {}}
 
     if tool_args == {"": {}}:
         return {}
-
 
     # -----------------------------------------------------
     # get_stock_price
@@ -509,7 +527,6 @@ def normalize_tool_args(
                 "ticker"
             )
 
-
     # -----------------------------------------------------
     # search_stock
     # ticker -> query
@@ -525,7 +542,6 @@ def normalize_tool_args(
                 "ticker"
             )
 
-
     # -----------------------------------------------------
     # get_company_news
     # ticker -> symbol
@@ -540,7 +556,6 @@ def normalize_tool_args(
             tool_args["symbol"] = tool_args.pop(
                 "ticker"
             )
-
 
     return tool_args
 
@@ -566,22 +581,38 @@ async def run_agent(user_message: str):
 
 
     # -----------------------------------------------------
-    # Get all MCP tools
+    # Get MCP tools
     # -----------------------------------------------------
 
-    tools = await client.get_tools()
+    mcp_tools = await client.get_tools()
+
+
+    # -----------------------------------------------------
+    # Add RAG tools
+    # -----------------------------------------------------
+
+    rag_tools = [
+        retrieve_financial_knowledge,
+    ]
+
+
+    # -----------------------------------------------------
+    # Combine all tools
+    # -----------------------------------------------------
+
+    tools = mcp_tools + rag_tools
 
 
     # -----------------------------------------------------
     # Print available tools
     # -----------------------------------------------------
 
-    print("\nMCP TOOLS:")
+    print("\nAVAILABLE TOOLS:")
 
-    for tool in tools:
+    for available_tool in tools:
 
         print(
-            f"- {tool.name}"
+            f"- {available_tool.name}"
         )
 
 
@@ -647,7 +678,6 @@ async def run_agent(user_message: str):
 
         # -------------------------------------------------
         # No more tools
-        # Final answer
         # -------------------------------------------------
 
         if not response.tool_calls:
@@ -669,8 +699,8 @@ async def run_agent(user_message: str):
         # -------------------------------------------------
 
         tools_by_name = {
-            tool.name: tool
-            for tool in tools
+            available_tool.name: available_tool
+            for available_tool in tools
         }
 
 
@@ -682,14 +712,15 @@ async def run_agent(user_message: str):
 
             tool_name = tool_call["name"]
 
-
             tool_args = tool_call.get(
                 "args",
                 {},
             )
 
 
+            # -------------------------------------------------
             # Normalize arguments
+            # -------------------------------------------------
 
             tool_args = normalize_tool_args(
                 tool_name,
@@ -698,10 +729,9 @@ async def run_agent(user_message: str):
 
 
             print(
-                f"\nEXECUTING MCP TOOL: "
+                f"\nEXECUTING TOOL: "
                 f"{tool_name}"
             )
-
 
             print(
                 f"ARGS: {tool_args}"
@@ -712,12 +742,12 @@ async def run_agent(user_message: str):
             # Find tool
             # -------------------------------------------------
 
-            tool = tools_by_name.get(
+            selected_tool = tools_by_name.get(
                 tool_name
             )
 
 
-            if tool is None:
+            if selected_tool is None:
 
                 print(
                     f"UNKNOWN TOOL: "
@@ -741,17 +771,16 @@ async def run_agent(user_message: str):
                     }
                 )
 
-
                 continue
 
 
             # -------------------------------------------------
-            # Execute MCP tool
+            # Execute tool
             # -------------------------------------------------
 
             try:
 
-                result = await tool.ainvoke(
+                result = await selected_tool.ainvoke(
                     tool_args
                 )
 
@@ -811,10 +840,9 @@ if __name__ == "__main__":
 
     answer = asyncio.run(
         run_agent(
-            "What is the latest news about Nvidia?"
+            "What is my current checking balance, and what is an emergency fund?"
         )
     )
-
 
     print("\nFINAL ANSWER:")
     print(answer)
