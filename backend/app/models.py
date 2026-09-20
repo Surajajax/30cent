@@ -1,4 +1,5 @@
 from datetime import date, datetime
+
 from pgvector.sqlalchemy import Vector
 
 from sqlalchemy import (
@@ -12,7 +13,12 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.database import Base
 
@@ -20,7 +26,11 @@ from app.database import Base
 class PlaidItem(Base):
     __tablename__ = "plaid_items"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
     item_id: Mapped[str] = mapped_column(
         String(255),
@@ -172,6 +182,8 @@ class Transaction(Base):
     account: Mapped["Account"] = relationship(
         back_populates="transactions",
     )
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -213,6 +225,7 @@ class Document(Base):
         server_default=func.now(),
         nullable=False,
     )
+
     source: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -221,4 +234,84 @@ class Document(Base):
     chunk_index: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+    )
+
+
+# ============================================================
+# AI CONVERSATION MEMORY
+# ============================================================
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+
+    title: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="Message.created_at",
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"),
+        nullable=False,
+        index=True,
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    conversation: Mapped["Conversation"] = relationship(
+        back_populates="messages",
     )

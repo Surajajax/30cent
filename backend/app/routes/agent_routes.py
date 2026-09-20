@@ -20,6 +20,7 @@ router = APIRouter(
 
 class AgentRequest(BaseModel):
     message: str
+    conversation_id: int | None = None
 
 
 # =========================================================
@@ -28,6 +29,7 @@ class AgentRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     response: str
+    conversation_id: int
 
 
 # =========================================================
@@ -40,21 +42,34 @@ class AgentResponse(BaseModel):
 )
 async def agent_chat(request: AgentRequest):
 
-    if not request.message.strip():
+    # -----------------------------------------------------
+    # Validate message
+    # -----------------------------------------------------
 
+    if not request.message.strip():
         raise HTTPException(
             status_code=400,
             detail="Message cannot be empty.",
         )
 
+    # -----------------------------------------------------
+    # Run AI agent
+    # -----------------------------------------------------
+
     try:
 
-        answer = await run_agent(
-            request.message
+        result = await run_agent(
+            user_message=request.message,
+            conversation_id=request.conversation_id,
         )
 
+        # -------------------------------------------------
+        # Return AI response + conversation ID
+        # -------------------------------------------------
+
         return AgentResponse(
-            response=answer
+            response=result["response"],
+            conversation_id=result["conversation_id"],
         )
 
     except Exception as e:

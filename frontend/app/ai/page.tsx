@@ -4,7 +4,10 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+import {
+  getApiUrl,
+  getBackendErrorMessage,
+} from "@/lib/api";
 
 type Message = {
   role: "user" | "assistant";
@@ -22,6 +25,36 @@ export default function AiAssistantPage() {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // =========================================================
+  // CONVERSATION MEMORY
+  // =========================================================
+
+  const [conversationId, setConversationId] = useState<number | null>(
+    null
+  );
+
+  // =========================================================
+  // NEW CONVERSATION
+  // =========================================================
+
+  function startNewConversation() {
+    if (loading) {
+      return;
+    }
+
+    setConversationId(null);
+
+    setMessages([
+      {
+        role: "assistant",
+        content:
+          "Hi! I'm your 30cent financial assistant. Ask me about your balance, spending, stocks, market news, or transactions.",
+      },
+    ]);
+
+    setInput("");
+  }
 
   // =========================================================
   // SEND MESSAGE
@@ -59,20 +92,38 @@ export default function AiAssistantPage() {
           },
           body: JSON.stringify({
             message,
+            conversation_id: conversationId,
           }),
         }
       );
 
       if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
+        const errorBody = await response
+          .json()
+          .catch(() => ({}));
+
         throw new Error(
-          errorBody.detail || `Request failed with status ${response.status}`
+          errorBody.detail ||
+            `Request failed with status ${response.status}`
         );
       }
 
       const data = await response.json();
 
-      // Add AI response
+      // =====================================================
+      // SAVE CONVERSATION ID
+      // =====================================================
+
+      if (
+        typeof data.conversation_id === "number"
+      ) {
+        setConversationId(data.conversation_id);
+      }
+
+      // =====================================================
+      // ADD AI RESPONSE
+      // =====================================================
+
       setMessages((previous) => [
         ...previous,
         {
@@ -83,7 +134,10 @@ export default function AiAssistantPage() {
         },
       ]);
     } catch (error) {
-      console.error("AI request error:", error);
+      console.error(
+        "AI request error:",
+        error
+      );
 
       setMessages((previous) => [
         ...previous,
@@ -123,59 +177,73 @@ export default function AiAssistantPage() {
 
         <div className="mb-6">
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between">
 
-            {/* AI Icon */}
+            <div className="flex items-center gap-3">
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#2a2d29] bg-[#252925]">
+              {/* AI Icon */}
 
-              <svg
-                width="21"
-                height="21"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <path
-                  d="M12 3a7 7 0 0 0-7 7v3a4 4 0 0 0 4 4h1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#2a2d29] bg-[#252925]">
 
-                <path
-                  d="M12 3a7 7 0 0 1 7 7v3a4 4 0 0 1-4 4h-1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <svg
+                  width="21"
+                  height="21"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path
+                    d="M12 3a7 7 0 0 0-7 7v3a4 4 0 0 0 4 4h1"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
 
-                <path
-                  d="M9 21h6"
-                  strokeLinecap="round"
-                />
+                  <path
+                    d="M12 3a7 7 0 0 1 7 7v3a4 4 0 0 1-4 4h-1"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
 
-                <path
-                  d="M12 18v3"
-                  strokeLinecap="round"
-                />
-              </svg>
+                  <path
+                    d="M9 21h6"
+                    strokeLinecap="round"
+                  />
+
+                  <path
+                    d="M12 18v3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+
+              </div>
+
+              {/* Title */}
+
+              <div>
+
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                  AI Assistant
+                </h1>
+
+                <p className="mt-1 text-sm text-[#858a83]">
+                  Your personal financial assistant
+                </p>
+
+              </div>
 
             </div>
 
+            {/* New Chat */}
 
-            {/* Title */}
-
-            <div>
-
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                AI Assistant
-              </h1>
-
-              <p className="mt-1 text-sm text-[#858a83]">
-                Your personal financial assistant
-              </p>
-
-            </div>
+            <button
+              type="button"
+              onClick={startNewConversation}
+              disabled={loading}
+              className="rounded-xl border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              New chat
+            </button>
 
           </div>
 
@@ -206,7 +274,6 @@ export default function AiAssistantPage() {
 
               </div>
 
-
               <div>
 
                 <p className="text-sm font-medium">
@@ -220,7 +287,6 @@ export default function AiAssistantPage() {
               </div>
 
             </div>
-
 
             <div className="rounded-full border border-[#2a2d29] px-3 py-1 text-xs text-[#858a83]">
               AI
@@ -262,17 +328,21 @@ export default function AiAssistantPage() {
                     </div>
                   )}
 
-
                   {/* Message */}
 
                   {message.role === "assistant" ? (
                     <div className="prose prose-invert max-w-none text-sm leading-6 text-[#eceae5] [&_a]:text-[#b7d67b] [&_a]:underline [&_code]:rounded [&_code]:bg-[#1a1d1a] [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-[#1a1d1a] [&_pre]:p-3 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        skipHtml
+                      >
                         {message.content}
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
+                    <div className="whitespace-pre-wrap">
+                      {message.content}
+                    </div>
                   )}
 
                 </div>
@@ -345,7 +415,6 @@ export default function AiAssistantPage() {
                 Check my balance
               </button>
 
-
               <button
                 type="button"
                 onClick={() =>
@@ -358,7 +427,6 @@ export default function AiAssistantPage() {
                 My spending
               </button>
 
-
               <button
                 type="button"
                 onClick={() =>
@@ -370,7 +438,6 @@ export default function AiAssistantPage() {
               >
                 Nvidia price
               </button>
-
 
               <button
                 type="button"
@@ -399,9 +466,7 @@ export default function AiAssistantPage() {
               className="mb-4 flex items-end gap-2 rounded-2xl border border-[#353934] bg-[#20241f] p-2 transition focus-within:border-[#51574f]"
             >
 
-              {/* =================================================
-                  TEXT INPUT
-              ================================================= */}
+              {/* TEXT INPUT */}
 
               <textarea
                 value={input}
@@ -414,11 +479,9 @@ export default function AiAssistantPage() {
                     event.key === "Enter" &&
                     !event.shiftKey
                   ) {
-
                     event.preventDefault();
 
                     event.currentTarget.form?.requestSubmit();
-
                   }
 
                 }}
@@ -429,9 +492,7 @@ export default function AiAssistantPage() {
               />
 
 
-              {/* =================================================
-                  SEND BUTTON
-              ================================================= */}
+              {/* SEND BUTTON */}
 
               <button
                 type="submit"
@@ -504,9 +565,7 @@ export default function AiAssistantPage() {
             </form>
 
 
-            {/* =================================================
-                FOOTER
-            ================================================= */}
+            {/* FOOTER */}
 
             <p className="pb-4 text-center text-[11px] text-[#5f645e]">
               AI responses are generated from your connected

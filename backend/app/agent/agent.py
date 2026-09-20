@@ -11,11 +11,18 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_core.messages import (
     SystemMessage,
     HumanMessage,
+    AIMessage,
 )
 
 from langchain_core.tools import tool
 
 from app.rag.retriever import retrieve_context
+
+from app.agent.memory import (
+    create_conversation,
+    save_message,
+    get_conversation_messages,
+)
 
 
 load_dotenv()
@@ -42,7 +49,6 @@ async def create_mcp_client():
 
     client = MultiServerMCPClient(
         {
-
             # -------------------------------------------------
             # FINANCE MCP
             # -------------------------------------------------
@@ -81,7 +87,6 @@ async def create_mcp_client():
                     "app.mcp.news_server",
                 ],
             },
-
         }
     )
 
@@ -217,7 +222,6 @@ Examples:
 "How does credit card debt work?"
 "How can I track expenses?"
 "What is cash flow?"
-
 
 Do NOT use RAG for live or personal information.
 
@@ -387,6 +391,7 @@ article supports it.
 =========================================================
 RAG RULES
 =========================================================
+
 RAG documents are the source of truth for stable financial
 education.
 
@@ -406,6 +411,8 @@ When answering a question using retrieve_financial_knowledge:
 6. Do not treat RAG documents as current market or account data.
 
 For current information, always use the appropriate MCP tool.
+
+
 =========================================================
 CURRENT DATA RULE
 =========================================================
@@ -428,6 +435,36 @@ If the user asks for:
 use the appropriate live tool.
 
 Do not answer current-data questions from memory.
+
+
+=========================================================
+CONVERSATION MEMORY
+=========================================================
+
+Previous messages in the conversation are available to you.
+
+Use previous conversation context to understand references
+such as:
+
+- "that"
+- "it"
+- "this"
+- "the previous one"
+- "my balance"
+- "that stock"
+- "what about it?"
+
+Do not repeat questions that have already been answered when
+the previous conversation provides the required context.
+
+However, previous conversation messages are NOT a substitute
+for live financial, market, or news data.
+
+If a previous message contains an old balance, stock price,
+transaction, or news result, do not treat it as current.
+
+Use the appropriate live tool whenever current information
+is required.
 
 
 =========================================================
@@ -561,10 +598,107 @@ def normalize_tool_args(
 
 
 # =========================================================
+# CONVERT STORED MESSAGES TO LANGCHAIN MESSAGES
+# =========================================================
+
+def build_conversation_messages(
+    history: list[dict],
+):
+    """
+    Convert database messages into LangChain messages.
+    """
+
+    messages = []
+
+    for message in history:
+
+        role = message.get("role")
+        content = message.get("content", "")
+
+        if role == "user":
+
+            messages.append(
+                HumanMessage(
+                    content=content
+                )
+            )
+
+        elif role == "assistant":
+
+            messages.append(
+                AIMessage(
+                    content=content
+                )
+            )
+
+    return messages
+
+
+# =========================================================
 # RUN AGENT
 # =========================================================
 
-async def run_agent(user_message: str):
+async def run_agent(
+    user_message: str,
+    conversation_id: int | None = None,
+):
+
+    # -----------------------------------------------------
+    # Validate message
+    # -----------------------------------------------------
+
+    if not user_message.strip():
+        return "Please enter a message."
+
+
+    # -----------------------------------------------------
+    # Create conversation if needed
+    # -----------------------------------------------------
+
+    if conversation_id is None:
+
+        conversation_id = create_conversation(
+            title=user_message[:80]
+        )
+
+        print(
+            f"\nNEW CONVERSATION: "
+            f"{conversation_id}"
+        )
+
+    else:
+
+        print(
+            f"\nUSING CONVERSATION: "
+            f"{conversation_id}"
+        )
+
+
+    # -----------------------------------------------------
+    # Save user message
+    # -----------------------------------------------------
+
+    save_message(
+        conversation_id=conversation_id,
+        role="user",
+        content=user_message,
+    )
+
+
+    # -----------------------------------------------------
+    # Load previous conversation
+    # -----------------------------------------------------
+
+    history = get_conversation_messages(
+        conversation_id=conversation_id
+    )
+
+
+    print(
+        f"CONVERSATION HISTORY: "
+        f"{len(history)} messages"
+    )
+
 
     # -----------------------------------------------------
     # Create LLM
@@ -630,16 +764,33 @@ async def run_agent(user_message: str):
     # -----------------------------------------------------
 
     messages = [
-
         SystemMessage(
             content=SYSTEM_PROMPT
-        ),
+        )
+    ]
 
+    # Add previous conversation
+    # EXCEPT the current user message.
+    #
+    # The current message was already saved above,
+    # so remove it from the history we send to the
+    # model to avoid sending it twice.
+
+    previous_history = history[:-1]
+
+    messages.extend(
+        build_conversation_messages(
+            previous_history
+        )
+    )
+
+    # Add current user message.
+
+    messages.append(
         HumanMessage(
             content=user_message
-        ),
-
-    ]
+        )
+    )
 
 
     # -----------------------------------------------------
@@ -682,7 +833,21 @@ async def run_agent(user_message: str):
 
         if not response.tool_calls:
 
-            return response.content
+            final_answer = response.content
+
+            # Save assistant response
+            save_message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=final_answer,
+            )
+
+            return{
+                
+                "response": final_answer,
+                "conversation_id": conversation_id,
+                
+            }
 
 
         # -------------------------------------------------
@@ -826,10 +991,22 @@ async def run_agent(user_message: str):
     # Safety fallback
     # -----------------------------------------------------
 
-    return (
+    final_answer = (
         "I was unable to complete the request "
         "because too many tool calls were required."
     )
+
+    save_message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=final_answer,
+    )
+
+    return{
+        
+        "response": final_answer,
+        "conversation_id": conversation_id,
+    }
 
 
 # =========================================================
@@ -838,11 +1015,16 @@ async def run_agent(user_message: str):
 
 if __name__ == "__main__":
 
-    answer = asyncio.run(
-        run_agent(
-            "What is my current checking balance, and what is an emergency fund?"
-        )
-    )
+    async def test():
 
-    print("\nFINAL ANSWER:")
-    print(answer)
+        conversation_id = None
+
+        answer = await run_agent(
+            "What is my current checking balance?",
+            conversation_id=conversation_id,
+        )
+
+        print("\nFINAL ANSWER:")
+        print(answer)
+
+    asyncio.run(test())
