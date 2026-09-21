@@ -9,7 +9,6 @@ import {
   Wallet,
   Target,
   Sparkles,
-  BarChart3,
   Settings,
   Plug,
 } from 'lucide-react';
@@ -25,7 +24,6 @@ const navItems: NavItem[] = [
   { name: 'Finance', href: '/finance', icon: Wallet },
   { name: 'Goals', href: '/goals', icon: Target },
   { name: 'AI assistant', href: '/ai', icon: Sparkles },
-  { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Connect', href: '/connect', icon: Plug },
 ];
 
