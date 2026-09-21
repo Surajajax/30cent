@@ -23,7 +23,10 @@ from app.agent.memory import (
     save_message,
     get_conversation_messages,
 )
-
+from app.agent.user_memory import (
+    get_user_profile,
+    update_user_profile,
+)
 
 load_dotenv()
 
@@ -134,6 +137,33 @@ def retrieve_financial_knowledge(query: str) -> str:
 
     return context
 
+@tool
+def get_my_profile() -> dict:
+    """
+    Retrieve the user's permanent profile information.
+
+    Use this when the user asks about personal information
+    that may be stored across conversations, such as their name
+    or preferred currency.
+    """
+    return get_user_profile()
+
+
+@tool
+def update_my_profile(
+    name: str | None = None,
+    currency: str | None = None,
+) -> dict:
+    """
+    Save or update permanent user profile information.
+
+    Use this when the user explicitly provides personal profile
+    information such as their name or preferred currency.
+    """
+    return update_user_profile(
+        name=name,
+        currency=currency,
+    )
 
 # =========================================================
 # SYSTEM PROMPT
@@ -729,12 +759,12 @@ async def run_agent(
         retrieve_financial_knowledge,
     ]
 
+    user_memory_tools = [
+        get_my_profile,
+        update_my_profile,
+    ]
 
-    # -----------------------------------------------------
-    # Combine all tools
-    # -----------------------------------------------------
-
-    tools = mcp_tools + rag_tools
+    tools = mcp_tools + rag_tools + user_memory_tools
 
 
     # -----------------------------------------------------
