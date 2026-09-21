@@ -29,6 +29,8 @@ from app.agent.user_memory import (
 )
 from app.services.goal_service import (
     add_goal_contribution as add_goal_contribution_service,
+    get_goals as get_goals_service,
+    get_goal_contributions as get_goal_contributions_service,
 )
 
 load_dotenv()
@@ -208,6 +210,82 @@ def add_money_to_goal(
                 "Unable to update the financial goal."
             ),
         }
+@tool
+def get_my_goals() -> dict:
+    """
+    Retrieve all financial goals belonging to the user.
+
+    Use this when the user asks about:
+    - their goals
+    - goal progress
+    - how much they have saved
+    - how much remains for a goal
+    - whether a goal is completed
+
+    Do not invent goal information.
+    Always use this tool for current goal information.
+    """
+
+    try:
+        goals = get_goals_service()
+
+        return {
+            "success": True,
+            "goals": goals,
+        }
+
+    except Exception as error:
+        print(
+            f"Get goals tool error: {error}"
+        )
+
+        return {
+            "success": False,
+            "message": "Unable to retrieve your goals.",
+        }
+@tool
+def get_goal_contributions(goal_name: str) -> dict:
+    """
+    Retrieve the contribution history for one of the user's
+    financial goals.
+
+    Use this when the user asks:
+    - "Show my Iphone contributions"
+    - "How much have I added to my Iphone goal?"
+    - "Show my laptop savings history"
+    - "What contributions have I made?"
+
+    Do not invent contribution information.
+    Always use this tool for current contribution history.
+    """
+
+    try:
+        result = get_goal_contributions_service(
+            goal_name=goal_name,
+        )
+
+        return {
+            "success": True,
+            "data": result,
+        }
+
+    except ValueError as error:
+        return {
+            "success": False,
+            "message": str(error),
+        }
+
+    except Exception as error:
+        print(
+            f"Get goal contributions tool error: {error}"
+        )
+
+        return {
+            "success": False,
+            "message": (
+                "Unable to retrieve goal contribution history."
+            ),
+        }        
 
 @tool
 def update_my_profile(
@@ -588,7 +666,69 @@ After a successful contribution, report:
 - target amount
 - progress
 - status
+==========================================================
+FINANCIAL GOAL READING RULES:
+==========================================================
+When the user asks about their financial goals,
+always use the get_my_goals tool to retrieve current
+goal information.
 
+Examples:
+- "What are my goals?"
+- "Show my goals"
+- "How much have I saved for my Iphone?"
+- "How much do I need for my laptop?"
+- "What's my goal progress?"
+
+Do not rely on old conversation messages for current
+goal amounts.
+
+Do not invent goals, amounts, progress, or target dates.
+
+For questions about a specific goal, use the data returned
+by get_my_goals.
+
+Calculate remaining amount as:
+
+target_amount - current_amount
+
+Calculate progress as:
+
+(current_amount / target_amount) * 100
+
+When reporting a goal, include:
+- goal name
+- current amount
+- target amount
+- progress
+- remaining amount
+- target date
+- status when useful
+
+==========================================================
+GOAL CONTRIBUTION HISTORY RULES:
+==========================================================
+When the user asks about contribution history for a
+specific goal, use the get_goal_contributions tool.
+
+Examples:
+- "Show my Iphone contributions"
+- "How much have I added to my Iphone goal?"
+- "Show my laptop savings history"
+- "What contributions have I made?"
+
+Do not invent contribution amounts, dates, or notes.
+
+When reporting contribution history, include:
+- contribution amount
+- note when available
+- contribution date when available
+
+You may also calculate the total contributed by summing
+the returned contribution amounts.
+
+If no contributions exist, clearly tell the user that
+there are no contribution records for that goal.
 
 =========================================================
 TOOL ERROR RULE
@@ -858,6 +998,8 @@ async def run_agent(
     ]
     
     goal_tools = [
+        get_my_goals,
+        get_goal_contributions,
         add_money_to_goal,
     ]
 
