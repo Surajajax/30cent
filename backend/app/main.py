@@ -7,7 +7,7 @@ from app.plaid_routes import router as plaid_router
 from app.routes.stock_routes import router as stock_router
 from app.routes.news_routes import router as news_router
 from app.routes.agent_routes import router as agent_router
-
+from app.routes.goal_routes import router as goal_router
 
 # =========================================================
 # FASTAPI APP
@@ -58,6 +58,9 @@ app.include_router(
     agent_router
 )
 
+app.include_router(
+    goal_router
+)
 
 # =========================================================
 # ROOT
