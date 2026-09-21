@@ -27,6 +27,9 @@ from app.agent.user_memory import (
     get_user_profile,
     update_user_profile,
 )
+from app.services.goal_service import (
+    add_goal_contribution as add_goal_contribution_service,
+)
 
 load_dotenv()
 
@@ -148,6 +151,63 @@ def get_my_profile() -> dict:
     """
     return get_user_profile()
 
+
+@tool
+def add_money_to_goal(
+    goal_name: str,
+    amount: float,
+    note: str | None = None,
+) -> dict:
+    """
+    Add money to one of the user's financial goals.
+
+    Use this tool when the user explicitly asks to add,
+    save, contribute, or put money toward a financial goal.
+
+    Examples:
+    - "Add $100 to my Iphone goal"
+    - "Put $50 into my laptop goal"
+    - "I saved another $200 for my emergency fund"
+
+    Args:
+        goal_name: Exact or approximate name of the user's goal.
+        amount: Amount of money to add to the goal.
+        note: Optional note describing the contribution.
+    """
+
+    try:
+        result = add_goal_contribution_service(
+            goal_name=goal_name,
+            amount=amount,
+            note=note,
+        )
+
+        return {
+            "success": True,
+            "message": (
+                f"Added ${amount:.2f} to "
+                f"{result['goal_name']}."
+            ),
+            "data": result,
+        }
+
+    except ValueError as error:
+        return {
+            "success": False,
+            "message": str(error),
+        }
+
+    except Exception as error:
+        print(
+            f"Goal contribution tool error: {error}"
+        )
+
+        return {
+            "success": False,
+            "message": (
+                "Unable to update the financial goal."
+            ),
+        }
 
 @tool
 def update_my_profile(
@@ -495,6 +555,39 @@ transaction, or news result, do not treat it as current.
 
 Use the appropriate live tool whenever current information
 is required.
+=========================================================
+FINANCIAL GOAL RULES:
+=========================================================
+
+The user can have financial goals stored in the database.
+
+When the user explicitly asks to add, save, contribute,
+or put money toward a goal, use the add_money_to_goal tool.
+
+Examples:
+- "Add $100 to my Iphone goal"
+- "Put $50 into my laptop goal"
+- "I saved another $200 for my emergency fund"
+
+Do not claim that money was added unless the tool succeeds.
+
+If the tool returns success=false, clearly explain the
+returned message to the user.
+
+Do not directly modify the database.
+
+Do not invent goals.
+
+If the goal name is ambiguous or cannot be found, ask the
+user which goal they mean.
+
+After a successful contribution, report:
+- goal name
+- amount added
+- new current amount
+- target amount
+- progress
+- status
 
 
 =========================================================
@@ -763,8 +856,12 @@ async def run_agent(
         get_my_profile,
         update_my_profile,
     ]
+    
+    goal_tools = [
+        add_money_to_goal,
+    ]
 
-    tools = mcp_tools + rag_tools + user_memory_tools
+    tools = (mcp_tools + rag_tools + user_memory_tools + goal_tools)
 
 
     # -----------------------------------------------------
