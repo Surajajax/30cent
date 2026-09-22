@@ -99,3 +99,36 @@ def get_conversation_messages(
             }
             for message in messages
         ]
+        
+def get_latest_conversation(
+    user_id: str = DEFAULT_USER_ID,
+) -> dict | None:
+    """
+    Get the most recently updated conversation
+    belonging to the user.
+    """
+
+    with SessionLocal() as db:
+        conversation = db.execute(
+            select(Conversation)
+            .where(
+                Conversation.user_id == user_id
+            )
+            .order_by(
+                Conversation.updated_at.desc()
+            )
+        ).scalars().first()
+
+        if not conversation:
+            return None
+
+        messages = get_conversation_messages(
+            conversation.id,
+            user_id,
+        )
+
+        return {
+            "id": conversation.id,
+            "title": conversation.title,
+            "messages": messages,
+        }
