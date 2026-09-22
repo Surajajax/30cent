@@ -1,16 +1,23 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import Header from "@/components/Header";
+
 import Cashflow, {
   type MonthlyCashflow,
 } from "@/components/Cashflow";
+
 import TransactionList, {
   type Transaction,
 } from "@/components/TransactionList";
-import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+
+import FinancialCalendar from "@/components/FinancialCalendar";
+
+import {
+  getApiUrl,
+  getBackendErrorMessage,
+} from "@/lib/api";
 
 type Account = {
   account_id: string;
@@ -27,17 +34,25 @@ type Account = {
 };
 
 /*
+ * ============================================================
+ * DATE HELPERS
+ * ============================================================
+ */
+
+/*
  * Convert a date into:
+ *
  * YYYY-MM
  */
 const getMonthKey = (date: Date) => {
   return `${date.getFullYear()}-${String(
-    date.getMonth() + 1
+    date.getMonth() + 1,
   ).padStart(2, "0")}`;
 };
 
 /*
  * Convert a date into:
+ *
  * Jan, Feb, Mar...
  */
 const getMonthLabel = (date: Date) => {
@@ -46,10 +61,19 @@ const getMonthLabel = (date: Date) => {
   });
 };
 
+/*
+ * ============================================================
+ * HOME PAGE
+ * ============================================================
+ */
+
 export default function HomePage() {
   /*
+   * ==========================================================
    * PLAID DATA
+   * ==========================================================
    */
+
   const [transactions, setTransactions] =
     useState<Transaction[]>([]);
 
@@ -57,8 +81,11 @@ export default function HomePage() {
     useState<Account | null>(null);
 
   /*
+   * ==========================================================
    * PAGE STATE
+   * ==========================================================
    */
+
   const [loading, setLoading] =
     useState(true);
 
@@ -66,40 +93,60 @@ export default function HomePage() {
     useState<string | null>(null);
 
   /*
+   * ==========================================================
    * CASHFLOW MAXIMIZE STATE
+   * ==========================================================
    */
+
   const [cashflowExpanded, setCashflowExpanded] =
     useState(false);
 
   /*
+   * ==========================================================
    * FETCH PLAID DATA
+   * ==========================================================
    */
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
         setError(null);
 
+        /*
+         * Fetch connected accounts
+         */
+
         const accountsResponse = await fetch(
           getApiUrl("/api/plaid/accounts"),
           {
             cache: "no-store",
-          }
+          },
         );
+
+        /*
+         * Fetch transactions
+         */
 
         const transactionsResponse = await fetch(
           getApiUrl("/api/plaid/transactions"),
           {
             cache: "no-store",
-          }
+          },
         );
 
-        const accountsData = await accountsResponse.json();
-        const transactionsData = await transactionsResponse.json();
+        const accountsData =
+          await accountsResponse.json();
+
+        const transactionsData =
+          await transactionsResponse.json();
 
         /*
+         * ====================================================
          * NO BANK CONNECTED
+         * ====================================================
          */
+
         if (
           accountsResponse.status === 400 ||
           transactionsResponse.status === 400
@@ -110,57 +157,77 @@ export default function HomePage() {
         }
 
         /*
+         * ====================================================
          * ACCOUNT API ERROR
+         * ====================================================
          */
+
         if (!accountsResponse.ok) {
           throw new Error(
             accountsData.detail ||
-              "Failed to load checking account"
+              "Failed to load checking account",
           );
         }
 
         /*
+         * ====================================================
          * TRANSACTION API ERROR
+         * ====================================================
          */
+
         if (!transactionsResponse.ok) {
           throw new Error(
             transactionsData.detail ||
-              "Failed to load transactions"
+              "Failed to load transactions",
           );
         }
 
         /*
+         * ====================================================
          * FIND CHECKING ACCOUNT
+         * ====================================================
          */
+
         const checkingAccount =
           accountsData.accounts?.find(
             (item: Account) =>
               item.type === "depository" &&
-              item.subtype === "checking"
+              item.subtype === "checking",
           ) ?? null;
 
         setAccount(checkingAccount);
 
         /*
+         * ====================================================
          * PLAID TRANSACTIONS
+         * ====================================================
          */
+
         const plaidTransactions =
           Array.isArray(
-            transactionsData.transactions
+            transactionsData.transactions,
           )
             ? transactionsData.transactions
             : [];
 
         console.log(
           "Plaid checking transactions:",
-          plaidTransactions
+          plaidTransactions,
         );
 
         setTransactions(plaidTransactions);
       } catch (err) {
-        console.error("Dashboard fetch error:", err);
+        console.error(
+          "Dashboard fetch error:",
+          err,
+        );
 
-        setError(getBackendErrorMessage(err, "Unable to load your financial data."));
+        setError(
+          getBackendErrorMessage(
+            err,
+            "Unable to load your financial data.",
+          ),
+        );
 
         setAccount(null);
         setTransactions([]);
@@ -173,18 +240,24 @@ export default function HomePage() {
   }, []);
 
   /*
+   * ==========================================================
    * CURRENCY
+   * ==========================================================
    */
+
   const currency =
     account?.balances.iso_currency_code ||
     "USD";
 
   /*
+   * ==========================================================
    * MONTHLY CASHFLOW
    *
    * Uses every month that exists
    * in the Plaid transaction data.
+   * ==========================================================
    */
+
   const monthlyCashflow =
     useMemo<MonthlyCashflow[]>(() => {
       if (transactions.length === 0) {
@@ -194,6 +267,7 @@ export default function HomePage() {
       /*
        * Group transactions by month
        */
+
       const monthMap = new Map<
         string,
         MonthlyCashflow
@@ -201,15 +275,16 @@ export default function HomePage() {
 
       transactions.forEach((transaction) => {
         const transactionDate = new Date(
-          `${transaction.date}T00:00:00`
+          `${transaction.date}T00:00:00`,
         );
 
         /*
          * Ignore invalid dates
          */
+
         if (
           Number.isNaN(
-            transactionDate.getTime()
+            transactionDate.getTime(),
           )
         ) {
           return;
@@ -224,6 +299,7 @@ export default function HomePage() {
         /*
          * Create month if it doesn't exist
          */
+
         if (!monthMap.has(monthKey)) {
           monthMap.set(monthKey, {
             key: monthKey,
@@ -238,15 +314,17 @@ export default function HomePage() {
           monthMap.get(monthKey)!;
 
         /*
-         * Plaid convention:
+         * ====================================================
+         * PLAID CONVENTION
          *
          * Positive amount = money OUT
          * Negative amount = money IN
+         * ====================================================
          */
 
         if (transaction.amount < 0) {
           month.income += Math.abs(
-            transaction.amount
+            transaction.amount,
           );
         } else if (
           transaction.amount > 0
@@ -258,6 +336,7 @@ export default function HomePage() {
         /*
          * Calculate monthly net cashflow
          */
+
         month.netCashflow =
           month.income -
           month.expenses;
@@ -268,49 +347,68 @@ export default function HomePage() {
        *
        * Oldest month → newest month
        */
+
       return Array.from(
-        monthMap.values()
+        monthMap.values(),
       ).sort((a, b) =>
-        a.key.localeCompare(b.key)
+        a.key.localeCompare(b.key),
       );
     }, [transactions]);
 
   /*
+   * ==========================================================
    * TOTAL INCOME
+   * ==========================================================
    */
+
   const income = useMemo(() => {
     return monthlyCashflow.reduce(
       (total, month) =>
         total + month.income,
-      0
+      0,
     );
   }, [monthlyCashflow]);
 
   /*
+   * ==========================================================
    * TOTAL EXPENSES
+   * ==========================================================
    */
+
   const expenses = useMemo(() => {
     return monthlyCashflow.reduce(
       (total, month) =>
         total + month.expenses,
-      0
+      0,
     );
   }, [monthlyCashflow]);
 
   /*
+   * ==========================================================
    * NET CASHFLOW
+   * ==========================================================
    */
+
   const netCashflow =
     income - expenses;
 
   /*
+   * ==========================================================
    * CHECKING BALANCE
    *
    * This is the actual current balance
    * returned by Plaid.
+   * ==========================================================
    */
+
   const balance =
     account?.balances.current ?? 0;
+
+  /*
+   * ==========================================================
+   * RENDER
+   * ==========================================================
+   */
 
   return (
     <>
@@ -319,7 +417,9 @@ export default function HomePage() {
       <main className="px-4 pb-12 pt-6 text-[#f4f2ed] sm:px-6 lg:px-10">
         <div className="mx-auto max-w-[1440px]">
 
-          {/* PAGE HEADER */}
+          {/* ==================================================
+              PAGE HEADER
+              ================================================== */}
 
           <div className="mb-8">
             <p className="eyebrow">
@@ -336,7 +436,9 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* CASHFLOW + TRANSACTIONS */}
+          {/* ==================================================
+              CASHFLOW + TRANSACTIONS
+              ================================================== */}
 
           <section
             className={
@@ -362,7 +464,7 @@ export default function HomePage() {
               }
               onToggleExpand={() =>
                 setCashflowExpanded(
-                  (value) => !value
+                  (value) => !value,
                 )
               }
             />
@@ -381,68 +483,15 @@ export default function HomePage() {
             )}
           </section>
 
-          {/* CALENDAR */}
+          {/* ==================================================
+              FINANCIAL CALENDAR
+              ================================================== */}
 
-          <section className="mt-5 min-h-[360px] overflow-hidden rounded-2xl border border-[#2a2d29] bg-[#181b18]">
-
-            {/* CALENDAR HEADER */}
-
-            <div className="flex items-center justify-between border-b border-[#2a2d29] p-5">
-
-              <div>
-                <p className="eyebrow">
-                  Planning
-                </p>
-
-                <h2 className="mt-2 text-xl font-semibold">
-                  Calendar
-                </h2>
-
-                <p className="mt-1 text-sm text-[#858a83]">
-                  Keep track of upcoming
-                  financial events and
-                  important dates.
-                </p>
-              </div>
-
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#20241f]">
-                <CalendarDays
-                  size={19}
-                  className="text-[#a9b99b]"
-                />
-              </div>
-
-            </div>
-
-            {/* CALENDAR CONTENT */}
-
-            <div className="flex min-h-[270px] items-center justify-center px-6 text-center">
-
-              <div>
-
-                <CalendarDays
-                  size={32}
-                  className="mx-auto text-[#555b53]"
-                />
-
-                <h3 className="mt-4 text-lg font-medium">
-                  Calendar
-                </h3>
-
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#858a83]">
-                  Your financial calendar
-                  will appear here.
-                  Upcoming bills,
-                  payments, goals, and
-                  other important events
-                  can be displayed in
-                  this section.
-                </p>
-
-              </div>
-
-            </div>
-
+          <section className="mt-5">
+            <FinancialCalendar
+              transactions={transactions}
+              currency={currency}
+            />
           </section>
 
         </div>
