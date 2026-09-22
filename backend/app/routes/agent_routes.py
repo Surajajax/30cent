@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.agent.agent import run_agent
+from app.agent.memory import get_latest_conversation
 
 
 # =========================================================
@@ -81,4 +82,31 @@ async def agent_chat(request: AgentRequest):
         raise HTTPException(
             status_code=500,
             detail="Unable to process the AI request.",
+        )
+# =========================================================
+# GET LATEST CONVERSATION
+# =========================================================
+
+@router.get("/conversations/latest")
+async def get_latest_agent_conversation():
+    try:
+        conversation = get_latest_conversation()
+
+        if not conversation:
+            return {
+                "conversation": None,
+            }
+
+        return {
+            "conversation": conversation,
+        }
+
+    except Exception as e:
+        print(
+            f"Latest conversation route error: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to load the latest conversation.",
         )

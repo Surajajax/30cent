@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -14,44 +14,128 @@ type Message = {
   content: string;
 };
 
+const WELCOME_MESSAGE: Message = {
+  role: "assistant",
+  content:
+    "Hi! I'm your 30cent financial assistant. Ask me about your balance, spending, stocks, market news, or transactions.",
+};
+
 export default function AiAssistantPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Hi! I'm your 30cent financial assistant. Ask me about your balance, spending, stocks, market news, or transactions.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   const [input, setInput] = useState("");
+
   const [loading, setLoading] = useState(false);
 
+  const [conversationId, setConversationId] = useState<
+    number | null
+  >(null);
+
+  const [loadingConversation, setLoadingConversation] =
+    useState(true);
+
   // =========================================================
-  // CONVERSATION MEMORY
+  // LOAD LATEST CONVERSATION
   // =========================================================
 
-  const [conversationId, setConversationId] = useState<number | null>(
-    null
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLatestConversation() {
+      try {
+        setLoadingConversation(true);
+
+        const response = await fetch(
+          getApiUrl(
+            "/api/agent/conversations/latest",
+          ),
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load conversation: ${response.status}`,
+          );
+        }
+
+        const data = await response.json();
+
+        if (cancelled) {
+          return;
+        }
+
+        const conversation = data.conversation;
+
+        // ---------------------------------------------------
+        // No existing conversation
+        // ---------------------------------------------------
+
+        if (!conversation) {
+          setConversationId(null);
+          setMessages([WELCOME_MESSAGE]);
+          return;
+        }
+
+        // ---------------------------------------------------
+        // Restore existing conversation
+        // ---------------------------------------------------
+
+        setConversationId(
+          typeof conversation.id === "number"
+            ? conversation.id
+            : null,
+        );
+
+        if (
+          Array.isArray(conversation.messages) &&
+          conversation.messages.length > 0
+        ) {
+          setMessages(
+            conversation.messages.map(
+              (message: Message) => ({
+                role: message.role,
+                content: message.content,
+              }),
+            ),
+          );
+        } else {
+          setMessages([WELCOME_MESSAGE]);
+        }
+      } catch (error) {
+        console.error(
+          "Conversation loading error:",
+          error,
+        );
+
+        if (!cancelled) {
+          setConversationId(null);
+          setMessages([WELCOME_MESSAGE]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingConversation(false);
+        }
+      }
+    }
+
+    void loadLatestConversation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // =========================================================
   // NEW CONVERSATION
   // =========================================================
 
   function startNewConversation() {
-    if (loading) {
+    if (loading || loadingConversation) {
       return;
     }
 
     setConversationId(null);
 
-    setMessages([
-      {
-        role: "assistant",
-        content:
-          "Hi! I'm your 30cent financial assistant. Ask me about your balance, spending, stocks, market news, or transactions.",
-      },
-    ]);
+    setMessages([WELCOME_MESSAGE]);
 
     setInput("");
   }
@@ -63,11 +147,18 @@ export default function AiAssistantPage() {
   async function sendMessage() {
     const message = input.trim();
 
-    if (!message || loading) {
+    if (
+      !message ||
+      loading ||
+      loadingConversation
+    ) {
       return;
     }
 
-    // Add user message
+    // -------------------------------------------------------
+    // Add user message immediately
+    // -------------------------------------------------------
+
     setMessages((previous) => [
       ...previous,
       {
@@ -76,10 +167,16 @@ export default function AiAssistantPage() {
       },
     ]);
 
+    // -------------------------------------------------------
     // Clear input
+    // -------------------------------------------------------
+
     setInput("");
 
+    // -------------------------------------------------------
     // Start loading
+    // -------------------------------------------------------
+
     setLoading(true);
 
     try {
@@ -94,7 +191,7 @@ export default function AiAssistantPage() {
             message,
             conversation_id: conversationId,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -104,25 +201,27 @@ export default function AiAssistantPage() {
 
         throw new Error(
           errorBody.detail ||
-            `Request failed with status ${response.status}`
+            `Request failed with status ${response.status}`,
         );
       }
 
       const data = await response.json();
 
-      // =====================================================
-      // SAVE CONVERSATION ID
-      // =====================================================
+      // -----------------------------------------------------
+      // Save conversation ID
+      // -----------------------------------------------------
 
       if (
         typeof data.conversation_id === "number"
       ) {
-        setConversationId(data.conversation_id);
+        setConversationId(
+          data.conversation_id,
+        );
       }
 
-      // =====================================================
-      // ADD AI RESPONSE
-      // =====================================================
+      // -----------------------------------------------------
+      // Add AI response
+      // -----------------------------------------------------
 
       setMessages((previous) => [
         ...previous,
@@ -136,7 +235,7 @@ export default function AiAssistantPage() {
     } catch (error) {
       console.error(
         "AI request error:",
-        error
+        error,
       );
 
       setMessages((previous) => [
@@ -145,7 +244,7 @@ export default function AiAssistantPage() {
           role: "assistant",
           content: getBackendErrorMessage(
             error,
-            "Sorry, I couldn't connect to the 30cent AI backend. Make sure the FastAPI server is running."
+            "Sorry, I couldn't connect to the 30cent AI backend. Make sure the FastAPI server is running.",
           ),
         },
       ]);
@@ -159,6 +258,10 @@ export default function AiAssistantPage() {
   // =========================================================
 
   function handleSuggestion(text: string) {
+    if (loading || loadingConversation) {
+      return;
+    }
+
     setInput(text);
   }
 
@@ -168,7 +271,6 @@ export default function AiAssistantPage() {
 
   return (
     <div className="min-h-[calc(100vh-1rem)] bg-[#181b18] px-4 py-6 text-[#f4f2ed] sm:px-6 lg:px-8">
-
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col">
 
         {/* =====================================================
@@ -176,7 +278,6 @@ export default function AiAssistantPage() {
         ===================================================== */}
 
         <div className="mb-6">
-
           <div className="flex items-center justify-between">
 
             <div className="flex items-center gap-3">
@@ -239,16 +340,17 @@ export default function AiAssistantPage() {
             <button
               type="button"
               onClick={startNewConversation}
-              disabled={loading}
+              disabled={
+                loading ||
+                loadingConversation
+              }
               className="rounded-xl border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed] disabled:cursor-not-allowed disabled:opacity-40"
             >
               New chat
             </button>
 
           </div>
-
         </div>
-
 
         {/* =====================================================
             CHAT CONTAINER
@@ -294,102 +396,130 @@ export default function AiAssistantPage() {
 
           </div>
 
-
           {/* ===================================================
               MESSAGES
           =================================================== */}
 
           <div className="flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6">
 
-            {messages.map((message, index) => (
+            {/* =================================================
+                LOADING CONVERSATION
+            ================================================= */}
 
-              <div
-                key={index}
-                className={`flex ${
-                  message.role === "user"
-                    ? "justify-end"
-                    : "justify-start"
-                }`}
-              >
+            {loadingConversation ? (
 
-                <div
-                  className={
-                    message.role === "user"
-                      ? "max-w-[85%] rounded-2xl rounded-br-md bg-[#f4f2ed] px-4 py-3 text-sm leading-6 text-[#181b18] sm:max-w-[70%]"
-                      : "max-w-[90%] rounded-2xl rounded-bl-md border border-[#2a2d29] bg-[#252925] px-4 py-3 text-sm leading-6 text-[#eceae5] sm:max-w-[75%]"
-                  }
-                >
+              <div className="flex justify-center py-12">
 
-                  {/* AI label */}
+                <div className="flex items-center gap-3 text-sm text-[#737970]">
 
-                  {message.role === "assistant" && (
-                    <div className="mb-2 text-xs font-medium text-[#b7d67b]">
-                      30cent AI
-                    </div>
-                  )}
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#353934] border-t-[#b7d67b]" />
 
-                  {/* Message */}
-
-                  {message.role === "assistant" ? (
-                    <div className="prose prose-invert max-w-none text-sm leading-6 text-[#eceae5] [&_a]:text-[#b7d67b] [&_a]:underline [&_code]:rounded [&_code]:bg-[#1a1d1a] [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-[#1a1d1a] [&_pre]:p-3 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        skipHtml
-                      >
-                        {message.content}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <div className="whitespace-pre-wrap">
-                      {message.content}
-                    </div>
-                  )}
+                  Loading conversation...
 
                 </div>
 
               </div>
 
-            ))}
+            ) : (
 
+              <>
+                {messages.map(
+                  (message, index) => (
 
-            {/* =================================================
-                LOADING
-            ================================================= */}
+                    <div
+                      key={`${index}-${message.role}`}
+                      className={`flex ${
+                        message.role === "user"
+                          ? "justify-end"
+                          : "justify-start"
+                      }`}
+                    >
 
-            {loading && (
+                      <div
+                        className={
+                          message.role === "user"
+                            ? "max-w-[85%] rounded-2xl rounded-br-md bg-[#f4f2ed] px-4 py-3 text-sm leading-6 text-[#181b18] sm:max-w-[70%]"
+                            : "max-w-[90%] rounded-2xl rounded-bl-md border border-[#2a2d29] bg-[#252925] px-4 py-3 text-sm leading-6 text-[#eceae5] sm:max-w-[75%]"
+                        }
+                      >
 
-              <div className="flex justify-start">
+                        {/* AI label */}
 
-                <div className="rounded-2xl rounded-bl-md border border-[#2a2d29] bg-[#252925] px-4 py-3">
+                        {message.role ===
+                          "assistant" && (
+                          <div className="mb-2 text-xs font-medium text-[#b7d67b]">
+                            30cent AI
+                          </div>
+                        )}
 
-                  <div className="flex items-center gap-1.5">
+                        {/* Message */}
 
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#858a83]" />
+                        {message.role ===
+                        "assistant" ? (
+                          <div className="prose prose-invert max-w-none text-sm leading-6 text-[#eceae5] [&_a]:text-[#b7d67b] [&_a]:underline [&_code]:rounded [&_code]:bg-[#1a1d1a] [&_code]:px-1.5 [&_code]:py-0.5 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:bg-[#1a1d1a] [&_pre]:p-3 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mb-1 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold">
+                            <ReactMarkdown
+                              remarkPlugins={[
+                                remarkGfm,
+                              ]}
+                              skipHtml
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div className="whitespace-pre-wrap">
+                            {message.content}
+                          </div>
+                        )}
 
-                    <span
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#858a83]"
-                      style={{
-                        animationDelay: "120ms",
-                      }}
-                    />
+                      </div>
 
-                    <span
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#858a83]"
-                      style={{
-                        animationDelay: "240ms",
-                      }}
-                    />
+                    </div>
+                  ),
+                )}
+
+                {/* =================================================
+                    LOADING
+                ================================================= */}
+
+                {loading && (
+
+                  <div className="flex justify-start">
+
+                    <div className="rounded-2xl rounded-bl-md border border-[#2a2d29] bg-[#252925] px-4 py-3">
+
+                      <div className="flex items-center gap-1.5">
+
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#858a83]" />
+
+                        <span
+                          className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#858a83]"
+                          style={{
+                            animationDelay:
+                              "120ms",
+                          }}
+                        />
+
+                        <span
+                          className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#858a83]"
+                          style={{
+                            animationDelay:
+                              "240ms",
+                          }}
+                        />
+
+                      </div>
+
+                    </div>
 
                   </div>
 
-                </div>
+                )}
 
-              </div>
-
+              </>
             )}
 
           </div>
-
 
           {/* ===================================================
               SUGGESTIONS + INPUT
@@ -407,10 +537,14 @@ export default function AiAssistantPage() {
                 type="button"
                 onClick={() =>
                   handleSuggestion(
-                    "What is my current checking balance?"
+                    "What is my current checking balance?",
                   )
                 }
-                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed]"
+                disabled={
+                  loading ||
+                  loadingConversation
+                }
+                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Check my balance
               </button>
@@ -419,10 +553,14 @@ export default function AiAssistantPage() {
                 type="button"
                 onClick={() =>
                   handleSuggestion(
-                    "How much did I spend recently?"
+                    "How much did I spend recently?",
                   )
                 }
-                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed]"
+                disabled={
+                  loading ||
+                  loadingConversation
+                }
+                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 My spending
               </button>
@@ -431,10 +569,14 @@ export default function AiAssistantPage() {
                 type="button"
                 onClick={() =>
                   handleSuggestion(
-                    "What is Nvidia's current stock price?"
+                    "What is Nvidia's current stock price?",
                   )
                 }
-                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed]"
+                disabled={
+                  loading ||
+                  loadingConversation
+                }
+                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Nvidia price
               </button>
@@ -443,16 +585,19 @@ export default function AiAssistantPage() {
                 type="button"
                 onClick={() =>
                   handleSuggestion(
-                    "What is the latest market news?"
+                    "What is the latest market news?",
                   )
                 }
-                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed]"
+                disabled={
+                  loading ||
+                  loadingConversation
+                }
+                className="whitespace-nowrap rounded-full border border-[#2a2d29] bg-[#20241f] px-3 py-2 text-xs text-[#858a83] transition hover:border-[#41463f] hover:text-[#f4f2ed] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Market news
               </button>
 
             </div>
-
 
             {/* =================================================
                 MESSAGE FORM
@@ -487,10 +632,12 @@ export default function AiAssistantPage() {
                 }}
                 placeholder="Ask about your finances, stocks, or market news..."
                 rows={1}
-                disabled={loading}
+                disabled={
+                  loading ||
+                  loadingConversation
+                }
                 className="min-h-[44px] flex-1 resize-none bg-transparent px-3 py-3 text-sm text-[#f4f2ed] outline-none placeholder:text-[#737970] disabled:cursor-not-allowed disabled:opacity-50"
               />
-
 
               {/* SEND BUTTON */}
 
@@ -498,6 +645,7 @@ export default function AiAssistantPage() {
                 type="submit"
                 disabled={
                   loading ||
+                  loadingConversation ||
                   !input.trim()
                 }
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f4f2ed] text-[#181b18] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
@@ -564,7 +712,6 @@ export default function AiAssistantPage() {
 
             </form>
 
-
             {/* FOOTER */}
 
             <p className="pb-4 text-center text-[11px] text-[#5f645e]">
@@ -577,7 +724,6 @@ export default function AiAssistantPage() {
         </div>
 
       </div>
-
     </div>
   );
 }
