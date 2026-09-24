@@ -7,7 +7,7 @@ from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUse
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
 from plaid.model.item_public_token_exchange_request import (
-    ItemPublicTokenExchangeRequest
+    ItemPublicTokenExchangeRequest,
 )
 from plaid.model.accounts_get_request import AccountsGetRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
@@ -16,11 +16,12 @@ from plaid.model.item_remove_request import ItemRemoveRequest
 from app.plaid_client import plaid_client
 from app.database import get_db
 from app.models import Account, PlaidItem
+from app.auth import get_current_user_id
 
 
 router = APIRouter(
     prefix="/api/plaid",
-    tags=["Plaid"]
+    tags=["Plaid"],
 )
 
 
@@ -43,7 +44,12 @@ def _get_checking_account(response):
     return None
 
 
-def _persist_account(db: Session, plaid_item: PlaidItem, account) -> None:
+def _persist_account(
+    db: Session,
+    plaid_item: PlaidItem,
+    account,
+) -> None:
+
     stored_account = (
         db.query(Account)
         .filter(Account.plaid_account_id == account.account_id)
@@ -83,13 +89,18 @@ def _account_payload(account):
     }
 
 
-@router.post("/create-link-token")
-async def create_link_token():
+# ============================================================
+# CREATE PLAID LINK TOKEN
+# ============================================================
 
+@router.post("/create-link-token")
+async def create_link_token(
+    user_id: str = Depends(get_current_user_id),
+):
     try:
         request = LinkTokenCreateRequest(
             user=LinkTokenCreateRequestUser(
-                client_user_id="30cent-demo-user"
+                client_user_id=user_id
             ),
             client_name="30cent",
             products=[
@@ -98,7 +109,7 @@ async def create_link_token():
             country_codes=[
                 CountryCode("US")
             ],
-            language="en"
+            language="en",
         )
 
         response = plaid_client.link_token_create(request)
@@ -108,21 +119,23 @@ async def create_link_token():
         }
 
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=str(e),
         )
 
+
+# ============================================================
+# EXCHANGE PUBLIC TOKEN
+# ============================================================
 
 @router.post("/exchange-public-token")
 async def exchange_public_token(
     data: PublicTokenRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
-
     try:
-
         # Exchange public token with Plaid
         request = ItemPublicTokenExchangeRequest(
             public_token=data.public_token
@@ -135,24 +148,26 @@ async def exchange_public_token(
         access_token = response.access_token
         item_id = response.item_id
 
-        # Check if this Plaid Item already exists
+        # Check if this Plaid Item already belongs to this user
         existing_item = (
             db.query(PlaidItem)
-            .filter(PlaidItem.item_id == item_id)
+            .filter(
+                PlaidItem.item_id == item_id,
+                PlaidItem.user_id == user_id,
+            )
             .first()
         )
 
         if existing_item:
-
             # Update existing access token
             existing_item.access_token = access_token
 
         else:
-
-            # Save new Plaid connection
+            # Save new Plaid connection for authenticated user
             plaid_item = PlaidItem(
+                user_id=user_id,
                 item_id=item_id,
-                access_token=access_token
+                access_token=access_token,
             )
 
             db.add(plaid_item)
@@ -161,40 +176,44 @@ async def exchange_public_token(
 
         return {
             "success": True,
-            "item_id": item_id
+            "item_id": item_id,
         }
 
     except Exception as e:
-
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=str(e),
         )
 
 
+# ============================================================
+# GET ACCOUNTS
+# ============================================================
+
 @router.get("/accounts")
 async def get_accounts(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
-
-    # Get the latest connected Plaid item
+    # Get the latest Plaid item belonging ONLY to this user
     plaid_item = (
         db.query(PlaidItem)
+        .filter(
+            PlaidItem.user_id == user_id
+        )
         .order_by(PlaidItem.id.desc())
         .first()
     )
 
     if not plaid_item:
-
         raise HTTPException(
             status_code=400,
-            detail="No bank account connected"
+            detail="No bank account connected",
         )
 
     try:
-
         request = AccountsGetRequest(
             access_token=plaid_item.access_token
         )
@@ -206,52 +225,69 @@ async def get_accounts(
         if checking_account is None:
             raise HTTPException(
                 status_code=404,
-                detail="No checking account found"
+                detail="No checking account found",
             )
 
-        _persist_account(db, plaid_item, checking_account)
+        _persist_account(
+            db,
+            plaid_item,
+            checking_account,
+        )
+
         db.commit()
 
         return {
-            "accounts": [_account_payload(checking_account)]
+            "accounts": [
+                _account_payload(checking_account)
+            ]
         }
 
     except HTTPException:
         raise
+
     except Exception as e:
+        db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=str(e),
         )
 
 
+# ============================================================
+# DISCONNECT PLAID ACCOUNT
+# ============================================================
+
 @router.delete("/disconnect")
 async def disconnect_account(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
-
+    # Only get this user's Plaid connection
     plaid_item = (
         db.query(PlaidItem)
+        .filter(
+            PlaidItem.user_id == user_id
+        )
         .order_by(PlaidItem.id.desc())
         .first()
     )
 
     if not plaid_item:
-
         raise HTTPException(
             status_code=400,
-            detail="No bank account connected"
+            detail="No bank account connected",
         )
 
     try:
-
         request = ItemRemoveRequest(
             access_token=plaid_item.access_token
         )
 
         plaid_client.item_remove(request)
+
         db.delete(plaid_item)
+
         db.commit()
 
         return {
@@ -259,77 +295,103 @@ async def disconnect_account(
         }
 
     except Exception as e:
-
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=str(e),
         )
 
 
+# ============================================================
+# GET TRANSACTIONS
+# ============================================================
+
 @router.get("/transactions")
 async def get_transactions(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
-
+    # Only get this user's Plaid connection
     plaid_item = (
         db.query(PlaidItem)
+        .filter(
+            PlaidItem.user_id == user_id
+        )
         .order_by(PlaidItem.id.desc())
         .first()
     )
 
     if not plaid_item:
-
         raise HTTPException(
             status_code=400,
-            detail="No bank account connected"
+            detail="No bank account connected",
         )
 
     try:
-
         request = TransactionsSyncRequest(
             access_token=plaid_item.access_token
         )
 
+        # Get accounts from Plaid
         accounts_response = plaid_client.accounts_get(
-            AccountsGetRequest(access_token=plaid_item.access_token)
+            AccountsGetRequest(
+                access_token=plaid_item.access_token
+            )
         )
-        checking_account = _get_checking_account(accounts_response)
+
+        checking_account = _get_checking_account(
+            accounts_response
+        )
 
         if checking_account is None:
             raise HTTPException(
                 status_code=404,
-                detail="No checking account found"
+                detail="No checking account found",
             )
 
-        _persist_account(db, plaid_item, checking_account)
+        # Persist checking account
+        _persist_account(
+            db,
+            plaid_item,
+            checking_account,
+        )
+
         db.commit()
 
-        response = plaid_client.transactions_sync(request)
+        # Get transactions
+        response = plaid_client.transactions_sync(
+            request
+        )
 
         transactions = []
 
         for transaction in response.added:
 
-            if transaction.account_id != checking_account.account_id:
+            # Only return checking account transactions
+            if (
+                transaction.account_id
+                != checking_account.account_id
+            ):
                 continue
 
-            transactions.append({
-                "transaction_id": transaction.transaction_id,
-                "name": transaction.name,
-                "merchant_name": transaction.merchant_name,
-                "amount": transaction.amount,
-                "date": str(transaction.date),
-
-                "category": (
-                    transaction.personal_finance_category.primary
-                    if transaction.personal_finance_category
-                    else None
-                ),
-
-                "iso_currency_code": transaction.iso_currency_code
-            })
+            transactions.append(
+                {
+                    "transaction_id": transaction.transaction_id,
+                    "name": transaction.name,
+                    "merchant_name": transaction.merchant_name,
+                    "amount": transaction.amount,
+                    "date": str(transaction.date),
+                    "category": (
+                        transaction.personal_finance_category.primary
+                        if transaction.personal_finance_category
+                        else None
+                    ),
+                    "iso_currency_code": (
+                        transaction.iso_currency_code
+                    ),
+                }
+            )
 
         return {
             "transactions": transactions
@@ -337,9 +399,11 @@ async def get_transactions(
 
     except HTTPException:
         raise
+
     except Exception as e:
+        db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=str(e)
-        )   
+            detail=str(e),
+        )

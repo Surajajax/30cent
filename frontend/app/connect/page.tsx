@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
 
-import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+import { authenticatedFetch } from "@/lib/api-auth";
+import { getBackendErrorMessage } from "@/lib/api";
 
 type Account = {
   account_id: string;
@@ -77,7 +78,9 @@ export default function ConnectPage() {
       setLoadingAccounts(true);
       setError(null);
 
-      const response = await fetch(getApiUrl("/api/plaid/accounts"));
+      const response = await authenticatedFetch(
+        "/api/plaid/accounts"
+      );
 
       const data = await response.json();
 
@@ -105,7 +108,6 @@ export default function ConnectPage() {
 
       setAccounts(checkingAccounts);
       setConnected(checkingAccounts.length > 0);
-
     } catch (err) {
       console.error("Fetch accounts error:", err);
 
@@ -113,9 +115,11 @@ export default function ConnectPage() {
       setConnected(false);
 
       setError(
-        getBackendErrorMessage(err, "Unable to load your accounts.")
+        getBackendErrorMessage(
+          err,
+          "Unable to load your accounts."
+        )
       );
-
     } finally {
       setLoadingAccounts(false);
       setCheckingConnection(false);
@@ -132,9 +136,12 @@ export default function ConnectPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(getApiUrl("/api/plaid/create-link-token"), {
-        method: "POST",
-      });
+      const response = await authenticatedFetch(
+        "/api/plaid/create-link-token",
+        {
+          method: "POST",
+        }
+      );
 
       const data = await response.json();
 
@@ -145,53 +152,89 @@ export default function ConnectPage() {
       }
 
       setLinkToken(data.link_token);
-
     } catch (err) {
-      console.error("Create link token error:", err);
+      console.error(
+        "Create link token error:",
+        err
+      );
 
-      setError(getBackendErrorMessage(err, "Unable to connect to Plaid."));
+      setError(
+        getBackendErrorMessage(
+          err,
+          "Unable to connect to Plaid."
+        )
+      );
+
       setStartingLink(false);
-
     } finally {
       setLoading(false);
     }
   };
 
-  const exchangePublicToken = async (publicToken: string) => {
+  // --------------------------------------------------
+  // Exchange Plaid Public Token
+  // --------------------------------------------------
+
+  const exchangePublicToken = async (
+    publicToken: string
+  ) => {
     try {
       setError(null);
 
-      const response = await fetch(getApiUrl("/api/plaid/exchange-public-token"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          public_token: publicToken,
-        }),
-      });
+      const response = await authenticatedFetch(
+        "/api/plaid/exchange-public-token",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            public_token: publicToken,
+          }),
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Token exchange failed");
+        throw new Error(
+          data.detail || "Token exchange failed"
+        );
       }
 
-      console.log("Token exchange successful:", data);
+      console.log(
+        "Token exchange successful:",
+        data
+      );
+
       setLinkToken(null);
       setStartingLink(false);
+
       await fetchAccounts();
     } catch (err) {
-      console.error("Token exchange error:", err);
+      console.error(
+        "Token exchange error:",
+        err
+      );
+
       setStartingLink(false);
+
       setError(
-        getBackendErrorMessage(err, "Bank connected, but account retrieval failed.")
+        getBackendErrorMessage(
+          err,
+          "Bank connected, but account retrieval failed."
+        )
       );
     }
   };
 
+  // --------------------------------------------------
+  // Disconnect Plaid Account
+  // --------------------------------------------------
+
   const disconnectAccount = async () => {
-    if (!window.confirm("Log out from this bank account?")) {
+    if (
+      !window.confirm(
+        "Log out from this bank account?"
+      )
+    ) {
       return;
     }
 
@@ -199,33 +242,46 @@ export default function ConnectPage() {
       setDisconnecting(true);
       setError(null);
 
-      const response = await fetch(getApiUrl("/api/plaid/disconnect"), {
-        method: "DELETE",
-      });
+      const response = await authenticatedFetch(
+        "/api/plaid/disconnect",
+        {
+          method: "DELETE",
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Failed to log out");
+        throw new Error(
+          data.detail || "Failed to log out"
+        );
       }
 
       setAccounts([]);
       setConnected(false);
     } catch (err) {
-      console.error("Disconnect account error:", err);
-      setError("Unable to log out from this bank account.");
+      console.error(
+        "Disconnect account error:",
+        err
+      );
+
+      setError(
+        getBackendErrorMessage(
+          err,
+          "Unable to log out from this bank account."
+        )
+      );
     } finally {
       setDisconnecting(false);
     }
   };
 
   // --------------------------------------------------
-  // IMPORTANT:
   // Check database/backend every time this page opens
   // --------------------------------------------------
 
   useEffect(() => {
-    void Promise.resolve().then(fetchAccounts);
+    void fetchAccounts();
   }, []);
 
   // --------------------------------------------------
@@ -237,7 +293,11 @@ export default function ConnectPage() {
       <div className="mx-auto max-w-5xl">
 
         <PlaidLinkFlow
-          linkToken={startingLink ? linkToken : null}
+          linkToken={
+            startingLink
+              ? linkToken
+              : null
+          }
           onSuccess={exchangePublicToken}
           onExit={() => {
             setLinkToken(null);
@@ -247,11 +307,11 @@ export default function ConnectPage() {
 
         {/* Header */}
 
-        <h1 className="text-3xl font-semibold mb-3">
+        <h1 className="mb-3 text-3xl font-semibold">
           Connect
         </h1>
 
-        <p className="text-slate-300 max-w-2xl mb-8">
+        <p className="mb-8 max-w-2xl text-slate-300">
           Connect your accounts, banks, and services to
           power your financial insights.
         </p>
@@ -276,11 +336,11 @@ export default function ConnectPage() {
 
           <div className="max-w-xl rounded-2xl border border-white/10 bg-white/[0.03] p-6">
 
-            <h2 className="text-xl font-medium mb-2">
+            <h2 className="mb-2 text-xl font-medium">
               Connect a bank account
             </h2>
 
-            <p className="text-sm text-slate-400 mb-6">
+            <p className="mb-6 text-sm text-slate-400">
               Securely connect your account using Plaid.
               This demo uses the Plaid Sandbox environment.
             </p>
@@ -319,15 +379,18 @@ export default function ConnectPage() {
             <div className="mb-6">
 
               <div className="flex items-start justify-between gap-4">
+
                 <div>
+
                   <h2 className="text-2xl font-semibold">
                     Connected Accounts
                   </h2>
 
-                  <p className="text-sm text-slate-400 mt-1">
+                  <p className="mt-1 text-sm text-slate-400">
                     Your accounts connected through Plaid
                     Sandbox.
                   </p>
+
                 </div>
 
                 <button
@@ -336,8 +399,11 @@ export default function ConnectPage() {
                   disabled={disconnecting}
                   className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {disconnecting ? "Logging out..." : "Log out"}
+                  {disconnecting
+                    ? "Logging out..."
+                    : "Log out"}
                 </button>
+
               </div>
 
             </div>
@@ -369,7 +435,7 @@ export default function ConnectPage() {
                           {account.name}
                         </h3>
 
-                        <p className="text-sm text-slate-400 mt-1">
+                        <p className="mt-1 text-sm text-slate-400">
                           {account.subtype}
 
                           {account.mask
@@ -393,10 +459,11 @@ export default function ConnectPage() {
                         Current Balance
                       </p>
 
-                      <p className="text-2xl font-semibold mt-1">
+                      <p className="mt-1 text-2xl font-semibold">
 
                         {account.balances
-                          .iso_currency_code || "USD"}
+                          .iso_currency_code ||
+                          "USD"}
 
                         {" "}
 
@@ -425,7 +492,8 @@ export default function ConnectPage() {
                         <p className="text-sm text-slate-200">
 
                           {account.balances
-                            .iso_currency_code || "USD"}
+                            .iso_currency_code ||
+                            "USD"}
 
                           {" "}
 

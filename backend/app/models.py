@@ -23,12 +23,23 @@ from sqlalchemy.orm import (
 from app.database import Base
 
 
+# ============================================================
+# PLAID
+# ============================================================
+
 class PlaidItem(Base):
     __tablename__ = "plaid_items"
 
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
+        index=True,
+    )
+
+    # Authenticated Supabase user who owns this Plaid connection
+    user_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
         index=True,
     )
 
@@ -184,6 +195,10 @@ class Transaction(Base):
     )
 
 
+# ============================================================
+# RAG DOCUMENTS
+# ============================================================
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -315,6 +330,8 @@ class Message(Base):
     conversation: Mapped["Conversation"] = relationship(
         back_populates="messages",
     )
+
+
 # ============================================================
 # AI USER PROFILE MEMORY
 # ============================================================
@@ -357,7 +374,8 @@ class UserProfile(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    
+
+
 # ============================================================
 # FINANCIAL GOALS
 # ============================================================
@@ -426,7 +444,8 @@ class Goal(Base):
         back_populates="goal",
         cascade="all, delete-orphan",
     )
-    
+
+
 class GoalContribution(Base):
     __tablename__ = "goal_contributions"
 

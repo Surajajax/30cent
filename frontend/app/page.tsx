@@ -14,10 +14,8 @@ import TransactionList, {
 
 import FinancialCalendar from "@/components/FinancialCalendar";
 
-import {
-  getApiUrl,
-  getBackendErrorMessage,
-} from "@/lib/api";
+import { authenticatedFetch } from "@/lib/api-auth";
+import { getBackendErrorMessage } from "@/lib/api";
 
 type Account = {
   account_id: string;
@@ -114,26 +112,39 @@ export default function HomePage() {
         setError(null);
 
         /*
+         * ====================================================
          * Fetch connected accounts
+         *
+         * IMPORTANT:
+         * Use authenticatedFetch because the backend now
+         * requires a Supabase JWT.
+         * ====================================================
          */
 
-        const accountsResponse = await fetch(
-          getApiUrl("/api/plaid/accounts"),
-          {
-            cache: "no-store",
-          },
-        );
+        const accountsResponse =
+          await authenticatedFetch(
+            "/api/plaid/accounts",
+            {
+              cache: "no-store",
+            },
+          );
 
         /*
+         * ====================================================
          * Fetch transactions
+         *
+         * IMPORTANT:
+         * Use authenticatedFetch here as well.
+         * ====================================================
          */
 
-        const transactionsResponse = await fetch(
-          getApiUrl("/api/plaid/transactions"),
-          {
-            cache: "no-store",
-          },
-        );
+        const transactionsResponse =
+          await authenticatedFetch(
+            "/api/plaid/transactions",
+            {
+              cache: "no-store",
+            },
+          );
 
         const accountsData =
           await accountsResponse.json();
@@ -236,7 +247,7 @@ export default function HomePage() {
       }
     };
 
-    fetchDashboardData();
+    void fetchDashboardData();
   }, []);
 
   /*
