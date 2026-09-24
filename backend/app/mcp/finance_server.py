@@ -1,5 +1,5 @@
 import json
-from datetime import date
+import os
 
 from mcp.server.fastmcp import FastMCP
 
@@ -14,17 +14,47 @@ from app.models import PlaidItem
 mcp = FastMCP("30cent Finance")
 
 
-# ---------------------------------------------------------
+# =========================================================
+# USER CONTEXT
+# =========================================================
+
+def _get_user_id() -> str | None:
+    """
+    Get the authenticated user ID passed to this MCP process.
+
+    The user ID is supplied by the AI agent process through
+    the THIRTYCENT_USER_ID environment variable.
+
+    It is NOT exposed as an argument to the LLM tools.
+    """
+
+    user_id = os.getenv("THIRTYCENT_USER_ID")
+
+    if not user_id:
+        return None
+
+    return user_id
+
+
+# =========================================================
 # HELPERS
-# ---------------------------------------------------------
+# =========================================================
 
 def _enum_value(value):
     return getattr(value, "value", str(value))
 
 
-def _get_latest_plaid_item(db):
+def _get_latest_plaid_item(db, user_id: str):
+    """
+    Get the latest Plaid connection belonging ONLY
+    to the authenticated user.
+    """
+
     return (
         db.query(PlaidItem)
+        .filter(
+            PlaidItem.user_id == user_id
+        )
         .order_by(PlaidItem.id.desc())
         .first()
     )
@@ -41,9 +71,13 @@ def _get_checking_account(response):
     return None
 
 
-def _get_all_transactions(plaid_item, checking_account):
+def _get_all_transactions(
+    plaid_item,
+    checking_account,
+):
     """
     Get all available transactions for the checking account.
+
     Handles Plaid pagination.
     """
 
@@ -62,7 +96,9 @@ def _get_all_transactions(plaid_item, checking_account):
                 access_token=plaid_item.access_token,
             )
 
-        response = plaid_client.transactions_sync(request)
+        response = plaid_client.transactions_sync(
+            request
+        )
 
         for transaction in response.added:
 
@@ -81,16 +117,33 @@ def _get_all_transactions(plaid_item, checking_account):
                     .primary
                 )
 
-            transactions.append({
-                "transaction_id": transaction.transaction_id,
-                "account_id": transaction.account_id,
-                "name": transaction.name,
-                "merchant_name": transaction.merchant_name,
-                "amount": float(transaction.amount),
-                "date": str(transaction.date),
-                "category": category,
-                "currency": transaction.iso_currency_code,
-            })
+            transactions.append(
+                {
+                    "transaction_id":
+                        transaction.transaction_id,
+
+                    "account_id":
+                        transaction.account_id,
+
+                    "name":
+                        transaction.name,
+
+                    "merchant_name":
+                        transaction.merchant_name,
+
+                    "amount":
+                        float(transaction.amount),
+
+                    "date":
+                        str(transaction.date),
+
+                    "category":
+                        category,
+
+                    "currency":
+                        transaction.iso_currency_code,
+                }
+            )
 
         if not response.has_more:
             break
@@ -98,151 +151,260 @@ def _get_all_transactions(plaid_item, checking_account):
         cursor = response.next_cursor
 
     transactions.sort(
-        key=lambda transaction: transaction["date"],
+        key=lambda transaction:
+            transaction["date"],
         reverse=True,
     )
 
     return transactions
 
 
-# ---------------------------------------------------------
+# =========================================================
 # GET ACCOUNTS
-# ---------------------------------------------------------
+# =========================================================
 
 @mcp.tool()
 def get_accounts() -> str:
     """
-    Get the user's connected bank accounts from Plaid.
+    Get the authenticated user's connected bank accounts
+    from Plaid.
     """
+
+    user_id = _get_user_id()
+
+    if not user_id:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Authenticated user context is missing.",
+            }
+        )
 
     db = next(get_db())
 
     try:
-        plaid_item = _get_latest_plaid_item(db)
+
+        plaid_item = _get_latest_plaid_item(
+            db,
+            user_id,
+        )
 
         if not plaid_item:
-            return json.dumps({
-                "success": False,
-                "error": "No bank account connected.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No bank account connected.",
+                }
+            )
 
         request = AccountsGetRequest(
             access_token=plaid_item.access_token,
         )
 
-        response = plaid_client.accounts_get(request)
+        response = plaid_client.accounts_get(
+            request
+        )
 
         accounts = []
 
         for account in response.accounts:
-            accounts.append({
-                "account_id": account.account_id,
-                "name": account.name,
-                "official_name": account.official_name,
-                "type": _enum_value(account.type),
-                "subtype": _enum_value(account.subtype),
-                "mask": account.mask,
-                "available_balance": account.balances.available,
-                "current_balance": account.balances.current,
-                "currency": account.balances.iso_currency_code,
-            })
 
-        return json.dumps({
-            "success": True,
-            "accounts": accounts,
-        })
+            accounts.append(
+                {
+                    "account_id":
+                        account.account_id,
+
+                    "name":
+                        account.name,
+
+                    "official_name":
+                        account.official_name,
+
+                    "type":
+                        _enum_value(account.type),
+
+                    "subtype":
+                        _enum_value(account.subtype),
+
+                    "mask":
+                        account.mask,
+
+                    "available_balance":
+                        account.balances.available,
+
+                    "current_balance":
+                        account.balances.current,
+
+                    "currency":
+                        account.balances.iso_currency_code,
+                }
+            )
+
+        return json.dumps(
+            {
+                "success": True,
+                "accounts": accounts,
+            }
+        )
 
     except Exception as e:
-        return json.dumps({
-            "success": False,
-            "error": str(e),
-        })
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+            }
+        )
 
     finally:
         db.close()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # GET BALANCE
-# ---------------------------------------------------------
+# =========================================================
 
 @mcp.tool()
 def get_balance() -> str:
     """
-    Get the current balance of the user's connected checking account from Plaid.
+    Get the current balance of the authenticated user's
+    connected checking account from Plaid.
     """
+
+    user_id = _get_user_id()
+
+    if not user_id:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Authenticated user context is missing.",
+            }
+        )
 
     db = next(get_db())
 
     try:
-        plaid_item = _get_latest_plaid_item(db)
+
+        plaid_item = _get_latest_plaid_item(
+            db,
+            user_id,
+        )
 
         if not plaid_item:
-            return json.dumps({
-                "success": False,
-                "error": "No bank account connected.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No bank account connected.",
+                }
+            )
 
         request = AccountsGetRequest(
             access_token=plaid_item.access_token,
         )
 
-        response = plaid_client.accounts_get(request)
+        response = plaid_client.accounts_get(
+            request
+        )
 
-        checking_account = _get_checking_account(response)
+        checking_account = _get_checking_account(
+            response
+        )
 
         if checking_account is None:
-            return json.dumps({
-                "success": False,
-                "error": "No checking account found.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No checking account found.",
+                }
+            )
 
-        return json.dumps({
-            "success": True,
-            "account": {
-                "name": checking_account.name,
-                "mask": checking_account.mask,
-                "available_balance": checking_account.balances.available,
-                "current_balance": checking_account.balances.current,
-                "currency": checking_account.balances.iso_currency_code,
-            },
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "account": {
+                    "name":
+                        checking_account.name,
+
+                    "mask":
+                        checking_account.mask,
+
+                    "available_balance":
+                        checking_account
+                        .balances
+                        .available,
+
+                    "current_balance":
+                        checking_account
+                        .balances
+                        .current,
+
+                    "currency":
+                        checking_account
+                        .balances
+                        .iso_currency_code,
+                },
+            }
+        )
 
     except Exception as e:
-        return json.dumps({
-            "success": False,
-            "error": str(e),
-        })
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+            }
+        )
 
     finally:
         db.close()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # GET TRANSACTIONS
-# ---------------------------------------------------------
+# =========================================================
 
 @mcp.tool()
 def get_transactions() -> str:
     """
-    Get transactions from the user's connected checking account.
+    Get transactions from the authenticated user's
+    connected checking account.
+
     Transactions are returned newest first.
     """
+
+    user_id = _get_user_id()
+
+    if not user_id:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Authenticated user context is missing.",
+            }
+        )
 
     db = next(get_db())
 
     try:
-        plaid_item = _get_latest_plaid_item(db)
+
+        plaid_item = _get_latest_plaid_item(
+            db,
+            user_id,
+        )
 
         if not plaid_item:
-            return json.dumps({
-                "success": False,
-                "error": "No bank account connected.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No bank account connected.",
+                }
+            )
 
-        accounts_response = plaid_client.accounts_get(
-            AccountsGetRequest(
-                access_token=plaid_item.access_token,
+        accounts_response = (
+            plaid_client.accounts_get(
+                AccountsGetRequest(
+                    access_token=
+                        plaid_item.access_token,
+                )
             )
         )
 
@@ -251,46 +413,63 @@ def get_transactions() -> str:
         )
 
         if checking_account is None:
-            return json.dumps({
-                "success": False,
-                "error": "No checking account found.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No checking account found.",
+                }
+            )
 
         transactions = _get_all_transactions(
             plaid_item,
             checking_account,
         )
 
-        return json.dumps({
-            "success": True,
-            "account": {
-                "name": checking_account.name,
-                "mask": checking_account.mask,
-            },
-            "transactions": transactions,
-            "count": len(transactions),
-        })
+        return json.dumps(
+            {
+                "success": True,
+
+                "account": {
+                    "name":
+                        checking_account.name,
+
+                    "mask":
+                        checking_account.mask,
+                },
+
+                "transactions":
+                    transactions,
+
+                "count":
+                    len(transactions),
+            }
+        )
 
     except Exception as e:
-        return json.dumps({
-            "success": False,
-            "error": str(e),
-        })
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+            }
+        )
 
     finally:
         db.close()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # GET CASHFLOW
-# ---------------------------------------------------------
+# =========================================================
 
 @mcp.tool()
 def get_cashflow() -> str:
     """
-    Calculate cash flow from the user's checking account transactions.
+    Calculate cash flow from the authenticated user's
+    checking account transactions.
 
     Returns:
+
     - total inflow
     - total outflow
     - net cash flow
@@ -298,24 +477,43 @@ def get_cashflow() -> str:
     - category spending breakdown
     """
 
+    user_id = _get_user_id()
+
+    if not user_id:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "Authenticated user context is missing.",
+            }
+        )
+
     db = next(get_db())
 
     try:
-        plaid_item = _get_latest_plaid_item(db)
+
+        plaid_item = _get_latest_plaid_item(
+            db,
+            user_id,
+        )
 
         if not plaid_item:
-            return json.dumps({
-                "success": False,
-                "error": "No bank account connected.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No bank account connected.",
+                }
+            )
 
         # -------------------------------------------------
         # Get checking account
         # -------------------------------------------------
 
-        accounts_response = plaid_client.accounts_get(
-            AccountsGetRequest(
-                access_token=plaid_item.access_token,
+        accounts_response = (
+            plaid_client.accounts_get(
+                AccountsGetRequest(
+                    access_token=
+                        plaid_item.access_token,
+                )
             )
         )
 
@@ -324,10 +522,12 @@ def get_cashflow() -> str:
         )
 
         if checking_account is None:
-            return json.dumps({
-                "success": False,
-                "error": "No checking account found.",
-            })
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "No checking account found.",
+                }
+            )
 
         # -------------------------------------------------
         # Get transactions
@@ -351,7 +551,8 @@ def get_cashflow() -> str:
 
             amount = transaction["amount"]
 
-            # Plaid transaction convention:
+            # Plaid convention:
+            #
             # Positive amount = money leaving account
             # Negative amount = money entering account
 
@@ -365,7 +566,10 @@ def get_cashflow() -> str:
                 )
 
                 category_spending[category] = (
-                    category_spending.get(category, 0.0)
+                    category_spending.get(
+                        category,
+                        0.0,
+                    )
                     + amount
                 )
 
@@ -378,7 +582,8 @@ def get_cashflow() -> str:
         # -------------------------------------------------
 
         net_cash_flow = (
-            total_inflow - total_outflow
+            total_inflow -
+            total_outflow
         )
 
         # -------------------------------------------------
@@ -388,7 +593,8 @@ def get_cashflow() -> str:
         category_spending = dict(
             sorted(
                 category_spending.items(),
-                key=lambda item: item[1],
+                key=lambda item:
+                    item[1],
                 reverse=True,
             )
         )
@@ -397,55 +603,88 @@ def get_cashflow() -> str:
         # Return result
         # -------------------------------------------------
 
-        return json.dumps({
-            "success": True,
+        return json.dumps(
+            {
+                "success": True,
 
-            "account": {
-                "name": checking_account.name,
-                "mask": checking_account.mask,
-                "currency": checking_account.balances.iso_currency_code,
-            },
+                "account": {
+                    "name":
+                        checking_account.name,
 
-            "summary": {
-                "total_inflow": round(total_inflow, 2),
-                "total_outflow": round(total_outflow, 2),
-                "net_cash_flow": round(net_cash_flow, 2),
-                "transaction_count": len(transactions),
-            },
+                    "mask":
+                        checking_account.mask,
 
-            "spending_by_category": {
-                category: round(amount, 2)
-                for category, amount
-                in category_spending.items()
-            },
+                    "currency":
+                        checking_account
+                        .balances
+                        .iso_currency_code,
+                },
 
-            "period": {
-                "start_date": (
-                    transactions[-1]["date"]
-                    if transactions
-                    else None
-                ),
-                "end_date": (
-                    transactions[0]["date"]
-                    if transactions
-                    else None
-                ),
-            },
-        })
+                "summary": {
+                    "total_inflow":
+                        round(
+                            total_inflow,
+                            2,
+                        ),
+
+                    "total_outflow":
+                        round(
+                            total_outflow,
+                            2,
+                        ),
+
+                    "net_cash_flow":
+                        round(
+                            net_cash_flow,
+                            2,
+                        ),
+
+                    "transaction_count":
+                        len(transactions),
+                },
+
+                "spending_by_category": {
+                    category:
+                        round(
+                            amount,
+                            2,
+                        )
+                    for category, amount
+                    in category_spending.items()
+                },
+
+                "period": {
+                    "start_date": (
+                        transactions[-1]["date"]
+                        if transactions
+                        else None
+                    ),
+
+                    "end_date": (
+                        transactions[0]["date"]
+                        if transactions
+                        else None
+                    ),
+                },
+            }
+        )
 
     except Exception as e:
-        return json.dumps({
-            "success": False,
-            "error": str(e),
-        })
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+            }
+        )
 
     finally:
         db.close()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # START MCP SERVER
-# ---------------------------------------------------------
+# =========================================================
 
 if __name__ == "__main__":
     mcp.run()

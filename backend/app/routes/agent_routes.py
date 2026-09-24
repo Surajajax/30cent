@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth import get_current_user_id
 from app.agent.agent import run_agent
 from app.agent.memory import get_latest_conversation
 
@@ -41,8 +42,10 @@ class AgentResponse(BaseModel):
     "",
     response_model=AgentResponse,
 )
-async def agent_chat(request: AgentRequest):
-
+async def agent_chat(
+    request: AgentRequest,
+    user_id: str = Depends(get_current_user_id),
+):
     # -----------------------------------------------------
     # Validate message
     # -----------------------------------------------------
@@ -58,10 +61,10 @@ async def agent_chat(request: AgentRequest):
     # -----------------------------------------------------
 
     try:
-
         result = await run_agent(
             user_message=request.message,
             conversation_id=request.conversation_id,
+            user_id=user_id,
         )
 
         # -------------------------------------------------
@@ -74,7 +77,6 @@ async def agent_chat(request: AgentRequest):
         )
 
     except Exception as e:
-
         print(
             f"Agent route error: {e}"
         )
@@ -83,14 +85,20 @@ async def agent_chat(request: AgentRequest):
             status_code=500,
             detail="Unable to process the AI request.",
         )
+
+
 # =========================================================
 # GET LATEST CONVERSATION
 # =========================================================
 
 @router.get("/conversations/latest")
-async def get_latest_agent_conversation():
+async def get_latest_agent_conversation(
+    user_id: str = Depends(get_current_user_id),
+):
     try:
-        conversation = get_latest_conversation()
+        conversation = get_latest_conversation(
+            user_id=user_id,
+        )
 
         if not conversation:
             return {

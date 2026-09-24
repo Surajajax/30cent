@@ -4,10 +4,8 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import {
-  getApiUrl,
-  getBackendErrorMessage,
-} from "@/lib/api";
+import { authenticatedFetch } from "@/lib/api-auth";
+import { getBackendErrorMessage } from "@/lib/api";
 
 type Message = {
   role: "user" | "assistant";
@@ -45,15 +43,26 @@ export default function AiAssistantPage() {
       try {
         setLoadingConversation(true);
 
-        const response = await fetch(
-          getApiUrl(
-            "/api/agent/conversations/latest",
-          ),
+        /*
+         * IMPORTANT:
+         * Use authenticatedFetch instead of normal fetch.
+         *
+         * This automatically adds:
+         *
+         * Authorization: Bearer <supabase-access-token>
+         */
+        const response = await authenticatedFetch(
+          "/api/agent/conversations/latest",
         );
 
         if (!response.ok) {
+          const errorBody = await response
+            .json()
+            .catch(() => ({}));
+
           throw new Error(
-            `Failed to load conversation: ${response.status}`,
+            errorBody.detail ||
+              `Failed to load conversation: ${response.status}`,
           );
         }
 
@@ -180,13 +189,25 @@ export default function AiAssistantPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        getApiUrl("/api/agent"),
+      /*
+       * IMPORTANT:
+       *
+       * Previously this used:
+       *
+       * fetch(getApiUrl("/api/agent"))
+       *
+       * That did NOT send the Supabase JWT.
+       *
+       * authenticatedFetch() automatically sends:
+       *
+       * Authorization: Bearer <access-token>
+       *
+       * so FastAPI can authenticate the user.
+       */
+      const response = await authenticatedFetch(
+        "/api/agent",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             message,
             conversation_id: conversationId,

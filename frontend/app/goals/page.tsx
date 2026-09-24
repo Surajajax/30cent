@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { getApiUrl, getBackendErrorMessage } from "@/lib/api";
+import { getBackendErrorMessage } from "@/lib/api";
+import { authenticatedFetch } from "@/lib/api-auth";
 
 type Goal = {
   id: number;
@@ -54,8 +55,8 @@ export default function GoalsPage() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        getApiUrl("/api/goals"),
+      const response = await authenticatedFetch(
+        "/api/goals",
       );
 
       if (!response.ok) {
@@ -109,8 +110,8 @@ export default function GoalsPage() {
       setCreating(true);
       setError("");
 
-      const response = await fetch(
-        getApiUrl("/api/goals"),
+      const response = await authenticatedFetch(
+        "/api/goals",
         {
           method: "POST",
           headers: {
@@ -204,10 +205,8 @@ export default function GoalsPage() {
       setAddingContribution(true);
       setError("");
 
-      const response = await fetch(
-        getApiUrl(
-          `/api/goals/${selectedGoal.id}/contributions`,
-        ),
+      const response = await authenticatedFetch(
+        `/api/goals/${selectedGoal.id}/contributions`,
         {
           method: "POST",
           headers: {

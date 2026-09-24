@@ -1,9 +1,10 @@
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.auth import get_current_user_id
 from app.database import SessionLocal
 from app.models import Goal, GoalContribution
 
@@ -14,12 +15,10 @@ router = APIRouter(
 )
 
 
-DEFAULT_USER_ID = "30cent-demo-user"
-
-
 # ============================================================
 # REQUEST MODELS
 # ============================================================
+
 
 class GoalCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -48,13 +47,16 @@ class ContributionCreate(BaseModel):
 # GET ALL GOALS
 # ============================================================
 
+
 @router.get("")
-def get_goals():
+def get_goals(
+    user_id: str = Depends(get_current_user_id),
+):
     with SessionLocal() as db:
         goals = db.execute(
             select(Goal)
             .where(
-                Goal.user_id == DEFAULT_USER_ID
+                Goal.user_id == user_id
             )
             .order_by(Goal.created_at.desc())
         ).scalars().all()
@@ -80,13 +82,17 @@ def get_goals():
 # GET SINGLE GOAL
 # ============================================================
 
+
 @router.get("/{goal_id}")
-def get_goal(goal_id: int):
+def get_goal(
+    goal_id: int,
+    user_id: str = Depends(get_current_user_id),
+):
     with SessionLocal() as db:
         goal = db.execute(
             select(Goal).where(
                 Goal.id == goal_id,
-                Goal.user_id == DEFAULT_USER_ID,
+                Goal.user_id == user_id,
             )
         ).scalar_one_or_none()
 
@@ -128,12 +134,15 @@ def get_goal(goal_id: int):
 # CREATE GOAL
 # ============================================================
 
-@router.post("")
-def create_goal(request: GoalCreate):
-    with SessionLocal() as db:
 
+@router.post("")
+def create_goal(
+    request: GoalCreate,
+    user_id: str = Depends(get_current_user_id),
+):
+    with SessionLocal() as db:
         goal = Goal(
-            user_id=DEFAULT_USER_ID,
+            user_id=user_id,
             name=request.name.strip(),
             description=(
                 request.description.strip()
@@ -169,17 +178,18 @@ def create_goal(request: GoalCreate):
 # UPDATE GOAL
 # ============================================================
 
+
 @router.put("/{goal_id}")
 def update_goal(
     goal_id: int,
     request: GoalUpdate,
+    user_id: str = Depends(get_current_user_id),
 ):
     with SessionLocal() as db:
-
         goal = db.execute(
             select(Goal).where(
                 Goal.id == goal_id,
-                Goal.user_id == DEFAULT_USER_ID,
+                Goal.user_id == user_id,
             )
         ).scalar_one_or_none()
 
@@ -226,14 +236,17 @@ def update_goal(
 # DELETE GOAL
 # ============================================================
 
-@router.delete("/{goal_id}")
-def delete_goal(goal_id: int):
-    with SessionLocal() as db:
 
+@router.delete("/{goal_id}")
+def delete_goal(
+    goal_id: int,
+    user_id: str = Depends(get_current_user_id),
+):
+    with SessionLocal() as db:
         goal = db.execute(
             select(Goal).where(
                 Goal.id == goal_id,
-                Goal.user_id == DEFAULT_USER_ID,
+                Goal.user_id == user_id,
             )
         ).scalar_one_or_none()
 
@@ -256,17 +269,18 @@ def delete_goal(goal_id: int):
 # ADD CONTRIBUTION
 # ============================================================
 
+
 @router.post("/{goal_id}/contributions")
 def add_contribution(
     goal_id: int,
     request: ContributionCreate,
+    user_id: str = Depends(get_current_user_id),
 ):
     with SessionLocal() as db:
-
         goal = db.execute(
             select(Goal).where(
                 Goal.id == goal_id,
-                Goal.user_id == DEFAULT_USER_ID,
+                Goal.user_id == user_id,
             )
         ).scalar_one_or_none()
 
@@ -345,14 +359,17 @@ def add_contribution(
 # GET CONTRIBUTION HISTORY
 # ============================================================
 
-@router.get("/{goal_id}/contributions")
-def get_contributions(goal_id: int):
-    with SessionLocal() as db:
 
+@router.get("/{goal_id}/contributions")
+def get_contributions(
+    goal_id: int,
+    user_id: str = Depends(get_current_user_id),
+):
+    with SessionLocal() as db:
         goal = db.execute(
             select(Goal).where(
                 Goal.id == goal_id,
-                Goal.user_id == DEFAULT_USER_ID,
+                Goal.user_id == user_id,
             )
         ).scalar_one_or_none()
 

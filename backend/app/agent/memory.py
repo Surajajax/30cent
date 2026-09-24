@@ -6,15 +6,12 @@ from app.database import SessionLocal
 from app.models import Conversation, Message
 
 
-DEFAULT_USER_ID = "30cent-demo-user"
-
-
 def create_conversation(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
     title: str | None = None,
 ) -> int:
     """
-    Create a new AI conversation.
+    Create a new AI conversation for the authenticated user.
     """
 
     with SessionLocal() as db:
@@ -34,12 +31,26 @@ def save_message(
     conversation_id: int,
     role: str,
     content: str,
+    user_id: str,
 ) -> int:
     """
-    Save a message to an existing conversation.
+    Save a message only if the conversation belongs
+    to the authenticated user.
     """
 
     with SessionLocal() as db:
+        conversation = db.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+
+        if not conversation:
+            raise ValueError(
+                "Conversation does not belong to the authenticated user."
+            )
+
         message = Message(
             conversation_id=conversation_id,
             role=role,
@@ -48,15 +59,9 @@ def save_message(
 
         db.add(message)
 
-        conversation = db.get(
-            Conversation,
-            conversation_id,
+        conversation.updated_at = datetime.now(
+            timezone.utc
         )
-
-        if conversation:
-            conversation.updated_at = datetime.now(
-                timezone.utc
-            )
 
         db.commit()
         db.refresh(message)
@@ -66,13 +71,15 @@ def save_message(
 
 def get_conversation_messages(
     conversation_id: int,
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
 ) -> list[dict]:
     """
-    Load all messages belonging to a user's conversation.
+    Load all messages belonging to the authenticated
+    user's conversation.
     """
 
     with SessionLocal() as db:
+
         conversation = db.execute(
             select(Conversation).where(
                 Conversation.id == conversation_id,
@@ -86,10 +93,11 @@ def get_conversation_messages(
         messages = db.execute(
             select(Message)
             .where(
-                Message.conversation_id
-                == conversation_id
+                Message.conversation_id == conversation_id
             )
-            .order_by(Message.created_at.asc())
+            .order_by(
+                Message.created_at.asc()
+            )
         ).scalars().all()
 
         return [
@@ -99,16 +107,18 @@ def get_conversation_messages(
             }
             for message in messages
         ]
-        
+
+
 def get_latest_conversation(
-    user_id: str = DEFAULT_USER_ID,
+    user_id: str,
 ) -> dict | None:
     """
     Get the most recently updated conversation
-    belonging to the user.
+    belonging to the authenticated user.
     """
 
     with SessionLocal() as db:
+
         conversation = db.execute(
             select(Conversation)
             .where(

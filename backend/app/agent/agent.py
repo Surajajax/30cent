@@ -53,7 +53,10 @@ def create_llm():
 # MCP CLIENT
 # =========================================================
 
-async def create_mcp_client():
+async def create_mcp_client(user_id: str):
+
+    if not user_id:
+        raise ValueError("Authenticated user ID is required for MCP.")
 
     client = MultiServerMCPClient(
         {
@@ -68,6 +71,9 @@ async def create_mcp_client():
                     "-m",
                     "app.mcp.finance_server",
                 ],
+                "env": {
+                    "THIRTYCENT_USER_ID": user_id,
+                },
             },
 
             # -------------------------------------------------
@@ -142,166 +148,13 @@ def retrieve_financial_knowledge(query: str) -> str:
 
     return context
 
-@tool
-def get_my_profile() -> dict:
-    """
-    Retrieve the user's permanent profile information.
+# =========================================================
+# USER-SCOPED PROFILE AND GOAL TOOLS
+# =========================================================
+# These tools are created inside run_agent() so the authenticated
+# user_id is captured from FastAPI and cannot be chosen by the LLM.
+# =========================================================
 
-    Use this when the user asks about personal information
-    that may be stored across conversations, such as their name
-    or preferred currency.
-    """
-    return get_user_profile()
-
-
-@tool
-def add_money_to_goal(
-    goal_name: str,
-    amount: float,
-    note: str | None = None,
-) -> dict:
-    """
-    Add money to one of the user's financial goals.
-
-    Use this tool when the user explicitly asks to add,
-    save, contribute, or put money toward a financial goal.
-
-    Examples:
-    - "Add $100 to my Iphone goal"
-    - "Put $50 into my laptop goal"
-    - "I saved another $200 for my emergency fund"
-
-    Args:
-        goal_name: Exact or approximate name of the user's goal.
-        amount: Amount of money to add to the goal.
-        note: Optional note describing the contribution.
-    """
-
-    try:
-        result = add_goal_contribution_service(
-            goal_name=goal_name,
-            amount=amount,
-            note=note,
-        )
-
-        return {
-            "success": True,
-            "message": (
-                f"Added ${amount:.2f} to "
-                f"{result['goal_name']}."
-            ),
-            "data": result,
-        }
-
-    except ValueError as error:
-        return {
-            "success": False,
-            "message": str(error),
-        }
-
-    except Exception as error:
-        print(
-            f"Goal contribution tool error: {error}"
-        )
-
-        return {
-            "success": False,
-            "message": (
-                "Unable to update the financial goal."
-            ),
-        }
-@tool
-def get_my_goals() -> dict:
-    """
-    Retrieve all financial goals belonging to the user.
-
-    Use this when the user asks about:
-    - their goals
-    - goal progress
-    - how much they have saved
-    - how much remains for a goal
-    - whether a goal is completed
-
-    Do not invent goal information.
-    Always use this tool for current goal information.
-    """
-
-    try:
-        goals = get_goals_service()
-
-        return {
-            "success": True,
-            "goals": goals,
-        }
-
-    except Exception as error:
-        print(
-            f"Get goals tool error: {error}"
-        )
-
-        return {
-            "success": False,
-            "message": "Unable to retrieve your goals.",
-        }
-@tool
-def get_goal_contributions(goal_name: str) -> dict:
-    """
-    Retrieve the contribution history for one of the user's
-    financial goals.
-
-    Use this when the user asks:
-    - "Show my Iphone contributions"
-    - "How much have I added to my Iphone goal?"
-    - "Show my laptop savings history"
-    - "What contributions have I made?"
-
-    Do not invent contribution information.
-    Always use this tool for current contribution history.
-    """
-
-    try:
-        result = get_goal_contributions_service(
-            goal_name=goal_name,
-        )
-
-        return {
-            "success": True,
-            "data": result,
-        }
-
-    except ValueError as error:
-        return {
-            "success": False,
-            "message": str(error),
-        }
-
-    except Exception as error:
-        print(
-            f"Get goal contributions tool error: {error}"
-        )
-
-        return {
-            "success": False,
-            "message": (
-                "Unable to retrieve goal contribution history."
-            ),
-        }        
-
-@tool
-def update_my_profile(
-    name: str | None = None,
-    currency: str | None = None,
-) -> dict:
-    """
-    Save or update permanent user profile information.
-
-    Use this when the user explicitly provides personal profile
-    information such as their name or preferred currency.
-    """
-    return update_user_profile(
-        name=name,
-        currency=currency,
-    )
 
 # =========================================================
 # SYSTEM PROMPT
@@ -904,14 +757,15 @@ def build_conversation_messages(
 async def run_agent(
     user_message: str,
     conversation_id: int | None = None,
+    user_id: str = "",
 ):
 
     # -----------------------------------------------------
     # Validate message
     # -----------------------------------------------------
 
-    if not user_message.strip():
-        return "Please enter a message."
+    if not user_id:
+        raise ValueError("Authenticated user ID is required.")
 
 
     # -----------------------------------------------------
@@ -921,7 +775,8 @@ async def run_agent(
     if conversation_id is None:
 
         conversation_id = create_conversation(
-            title=user_message[:80]
+            title=user_message[:80],
+            user_id=user_id,
         )
 
         print(
@@ -945,6 +800,7 @@ async def run_agent(
         conversation_id=conversation_id,
         role="user",
         content=user_message,
+        user_id=user_id,
     )
 
 
@@ -953,7 +809,8 @@ async def run_agent(
     # -----------------------------------------------------
 
     history = get_conversation_messages(
-        conversation_id=conversation_id
+        conversation_id=conversation_id,
+        user_id=user_id,
     )
 
 
@@ -974,7 +831,7 @@ async def run_agent(
     # Create MCP client
     # -----------------------------------------------------
 
-    client = await create_mcp_client()
+    client = await create_mcp_client(user_id)
 
 
     # -----------------------------------------------------
@@ -992,18 +849,168 @@ async def run_agent(
         retrieve_financial_knowledge,
     ]
 
+    # -----------------------------------------------------
+    # USER-SCOPED PROFILE TOOLS
+    # -----------------------------------------------------
+    #
+    # user_id comes from FastAPI authentication.
+    # The LLM never receives user_id as a tool argument.
+    #
+
+    @tool
+    def get_my_profile() -> dict:
+        """
+        Retrieve the authenticated user's permanent profile
+        information, such as name or preferred currency.
+        """
+        return get_user_profile(
+            user_id=user_id,
+        )
+
+    @tool
+    def update_my_profile(
+        name: str | None = None,
+        currency: str | None = None,
+    ) -> dict:
+        """
+        Save or update the authenticated user's permanent
+        profile information.
+        """
+        return update_user_profile(
+            name=name,
+            currency=currency,
+            user_id=user_id,
+        )
+
+    # -----------------------------------------------------
+    # USER-SCOPED GOAL TOOLS
+    # -----------------------------------------------------
+
+    @tool
+    def get_my_goals() -> dict:
+        """
+        Retrieve all financial goals belonging to the
+        authenticated user.
+        """
+        try:
+            goals = get_goals_service(
+                user_id=user_id,
+            )
+
+            return {
+                "success": True,
+                "goals": goals,
+            }
+
+        except Exception as error:
+            print(
+                f"Get goals tool error: {error}"
+            )
+
+            return {
+                "success": False,
+                "message": "Unable to retrieve your goals.",
+            }
+
+    @tool
+    def get_goal_contributions(
+        goal_name: str,
+    ) -> dict:
+        """
+        Retrieve contribution history for one of the
+        authenticated user's financial goals.
+        """
+        try:
+            result = get_goal_contributions_service(
+                goal_name=goal_name,
+                user_id=user_id,
+            )
+
+            return {
+                "success": True,
+                "data": result,
+            }
+
+        except ValueError as error:
+            return {
+                "success": False,
+                "message": str(error),
+            }
+
+        except Exception as error:
+            print(
+                f"Get goal contributions tool error: {error}"
+            )
+
+            return {
+                "success": False,
+                "message": (
+                    "Unable to retrieve goal contribution history."
+                ),
+            }
+
+    @tool
+    def add_money_to_goal(
+        goal_name: str,
+        amount: float,
+        note: str | None = None,
+    ) -> dict:
+        """
+        Add money to one of the authenticated user's
+        financial goals.
+        """
+        try:
+            result = add_goal_contribution_service(
+                goal_name=goal_name,
+                amount=amount,
+                note=note,
+                user_id=user_id,
+            )
+
+            return {
+                "success": True,
+                "message": (
+                    f"Added ${amount:.2f} to "
+                    f"{result['goal_name']}."
+                ),
+                "data": result,
+            }
+
+        except ValueError as error:
+            return {
+                "success": False,
+                "message": str(error),
+            }
+
+        except Exception as error:
+            print(
+                f"Goal contribution tool error: {error}"
+            )
+
+            return {
+                "success": False,
+                "message": (
+                    "Unable to update the financial goal."
+                ),
+            }
+
     user_memory_tools = [
         get_my_profile,
         update_my_profile,
     ]
-    
+
     goal_tools = [
         get_my_goals,
         get_goal_contributions,
         add_money_to_goal,
     ]
 
-    tools = (mcp_tools + rag_tools + user_memory_tools + goal_tools)
+    tools = (
+        mcp_tools
+        + rag_tools
+        + user_memory_tools
+        + goal_tools
+    )
 
 
     # -----------------------------------------------------
@@ -1109,6 +1116,7 @@ async def run_agent(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=final_answer,
+                user_id=user_id,
             )
 
             return{
@@ -1269,6 +1277,7 @@ async def run_agent(
         conversation_id=conversation_id,
         role="assistant",
         content=final_answer,
+        user_id=user_id,
     )
 
     return{
@@ -1288,9 +1297,15 @@ if __name__ == "__main__":
 
         conversation_id = None
 
+        test_user_id = os.getenv(
+            "TEST_USER_ID",
+            "cc9e830a-3e96-4b2b-8b3d-968654486d5e",
+        )
+
         answer = await run_agent(
             "What is my current checking balance?",
             conversation_id=conversation_id,
+            user_id=test_user_id,
         )
 
         print("\nFINAL ANSWER:")

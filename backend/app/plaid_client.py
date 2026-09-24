@@ -13,7 +13,6 @@ PLAID_CLIENT_ID = os.getenv("PLAID_CLIENT_ID")
 PLAID_SECRET = os.getenv("PLAID_SECRET")
 PLAID_ENV = os.getenv("PLAID_ENV", "sandbox")
 
-
 if PLAID_ENV == "sandbox":
     PLAID_HOST = "https://sandbox.plaid.com"
 else:
