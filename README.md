@@ -661,34 +661,6 @@ Potential future improvements include:
 * [ ] Improved testing and observability
 
 ---
-
-# 📸 Screenshots
-
-Add application screenshots here as the project UI is finalized.
-
-Recommended screenshots:
-
-```text
-screenshots/
-├── dashboard.png
-├── connect-bank.png
-├── transactions.png
-├── cashflow.png
-├── goals.png
-├── ai-assistant.png
-└── market.png
-```
-
-Example:
-
-```markdown
-## Dashboard
-
-![30cent Dashboard](screenshots/dashboard.png)
-```
-
----
-
 # 🎯 What This Project Demonstrates
 
 30cent brings together several areas of modern software engineering:
